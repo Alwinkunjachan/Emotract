@@ -6,7 +6,7 @@ import Settings from "./ui/Settings";
 import { allUsersRoute } from "../utils/APIRoutes";
 import axiosInstance from "../utils/axiosInstance";
 
-export default function Contacts({ contacts, changeChat }) {
+export default function Contacts({ contacts, changeChat, unreadMessages = {}, onlineUsers = new Set() }) {
   const [currentUserName, setCurrentUserName] = useState(undefined);
   const [currentUserImage, setCurrentUserImage] = useState(undefined);
   const [currentSelected, setCurrentSelected] = useState(undefined);
@@ -114,20 +114,28 @@ export default function Contacts({ contacts, changeChat }) {
                     } hover:bg-[#dedede34]`}
                     onClick={() => changeCurrentChat(index, contact)}
                   >
-                    <div className="avatar min-w-[15%]">
+                    <div className="avatar min-w-[15%] relative">
                       <img
                         src={contact.avatarImage ? contact.avatarImage : fallBackImage}
                         className="w-12 h-12 rounded-full border-1 border-gray-400"
                         alt=""
                       />
+                      {onlineUsers.has(contact._id) && (
+                        <span className="absolute bottom-0 right-0 w-3 h-3 bg-green-500 border-2 border-[#080420] rounded-full"></span>
+                      )}
                     </div>
                     <div className="username flex flex-col gap-0  w-[80%]">
-                      <h3>{contact.username}</h3>
-                      <div 
-                        className={`text-sm  truncate ${contacts.filter(c => c._id == contact._id)?.lastMessage?.sender === "You" ? 'text-gray-500' : 'text-gray-500'}`}>
-                        {/* Check if lastMessageContact and lastMessage exist before rendering */}
-                        {lastMessageContact?.lastMessage?.sender === "You" && "You: "}
-                        <span className="">{lastMessageContact?.lastMessage?.text || "No messages yet"}</span>
+                      <div className="flex items-center justify-between">
+                        <h3>{contact.username}</h3>
+                        {unreadMessages[contact._id] > 0 && (
+                          <span className="bg-green-500 text-white text-xs font-bold rounded-full min-w-[20px] h-[20px] flex items-center justify-center px-1">
+                            {unreadMessages[contact._id]}
+                          </span>
+                        )}
+                      </div>
+                      <div
+                        className={`text-sm truncate ${unreadMessages[contact._id] > 0 ? 'text-green-400 font-semibold' : 'text-gray-500'}`}>
+                        {lastMessageContact?.last_message?.text || lastMessageContact?.lastMessage?.text || "No messages yet"}
                       </div>
                     </div>
                   </div>

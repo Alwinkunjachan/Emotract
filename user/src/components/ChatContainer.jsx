@@ -2,17 +2,30 @@ import { useState, useEffect, useRef } from "react";
 import styled from "styled-components";
 import ChatInput from "./ChatInput";
 import { v4 as uuidv4 } from "uuid";
-import { sendMessageRoute, recieveMessageRoute, fetchCurrentOnlineStatusRoute } from "../utils/APIRoutes";
+import { sendMessageRoute, recieveMessageRoute } from "../utils/APIRoutes";
 import axiosInstance from "../utils/axiosInstance";
 import fallBackImage from "../assets/avatars/avatar.png"
 import { useSocket } from "../context/SocketProvider";
 
-export default function ChatContainer({ currentChat, handleContactAfterMessage }) {
-  const [messages, setMessages] = useState([]); 
-  const [currentUserOnlineStatus, setCurrentUserOnlineStatus] = useState(false); 
+export default function ChatContainer({ currentChat, handleContactAfterMessage, arrivalMessage, onlineUsers, lastSeenMap = {} }) {
+  const [messages, setMessages] = useState([]);
   const scrollRef = useRef();
-  const [arrivalMessage, setArrivalMessage] = useState(null);
   const socket = useSocket();
+
+  const formatLastSeen = (dateStr) => {
+    if (!dateStr) return "Offline";
+    const date = new Date(dateStr);
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const isYesterday = date.toDateString() === yesterday.toDateString();
+    const time = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    if (isToday) return `Last seen today at ${time}`;
+    if (isYesterday) return `Last seen yesterday at ${time}`;
+    const dateFormatted = date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+    return `Last seen ${dateFormatted} at ${time}`;
+  };
 
   useEffect(() => {
     const fetchMessages = async () => {
@@ -45,20 +58,6 @@ export default function ChatContainer({ currentChat, handleContactAfterMessage }
     };
 
     getCurrentChat();
-  }, [currentChat]);
-
-  // Handle online status 
-  useEffect(() => {
-    const fetchCurrentOnlineStatus = async () => {
-        try {
-          const response = await axiosInstance.get(`${fetchCurrentOnlineStatusRoute}/${currentChat._id}`);
-          setCurrentUserOnlineStatus(response.data?.is_online);
-        } catch (error) {
-          console.error("Error fetching messages:", error);
-        }
-      }
-
-    fetchCurrentOnlineStatus();
   }, [currentChat]);
 
   const handleSendMsg = async (msg) => {
@@ -99,23 +98,11 @@ export default function ChatContainer({ currentChat, handleContactAfterMessage }
   };
   
   useEffect(() => {
-    if (!socket) return;
-  
-    const handleMessageReceive = (msg) => {
-      setArrivalMessage({ fromSelf: false, message: msg });
-    };
-  
-    socket.on("msg-recieve", handleMessageReceive);
-  
-    return () => {
-      socket.off("msg-recieve", handleMessageReceive); // Cleanup listener on unmount
-    };
-  }, [socket]);
-  
-
-  useEffect(() => {
-    arrivalMessage && setMessages((prev) => [...prev, arrivalMessage]);
-  }, [arrivalMessage]);
+    // Only add the message if it's from the user we're currently chatting with
+    if (arrivalMessage && currentChat && arrivalMessage.from === currentChat._id) {
+      setMessages((prev) => [...prev, arrivalMessage]);
+    }
+  }, [arrivalMessage, currentChat]);
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -134,11 +121,10 @@ export default function ChatContainer({ currentChat, handleContactAfterMessage }
           </div>
           <div className="username flex flex-col justify-start">
             <h3 className="text-white mt-1">{currentChat.username}</h3>
-            {currentUserOnlineStatus ?
-            (
+            {onlineUsers.has(currentChat._id) ? (
               <span className="text-green-600 text-sm">Online</span>
-            ):(
-              <span className="text-red-700 text-sm">Offline</span>
+            ) : (
+              <span className="text-gray-400 text-sm">{formatLastSeen(lastSeenMap[currentChat._id])}</span>
             )}
           </div>
         </div>

@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
 import { host } from "../utils/axiosInstance";
 
@@ -6,21 +6,49 @@ const SocketContext = createContext(null);
 
 export const SocketProvider = ({ children }) => {
   const [socket, setSocket] = useState(null);
+  const socketRef = useRef(null);
 
-  useEffect(() => {
+  const connect = useCallback(() => {
+    // Only connect if not already connected
+    if (socketRef.current?.connected) return;
+
     const newSocket = io(host, {
       withCredentials: true,
     });
+    socketRef.current = newSocket;
     setSocket(newSocket);
+  }, []);
 
-    return () => newSocket.disconnect(); // Cleanup on unmount
+  const disconnect = useCallback(() => {
+    if (socketRef.current) {
+      socketRef.current.disconnect();
+      socketRef.current = null;
+      setSocket(null);
+    }
+  }, []);
+
+  // Cleanup on unmount (tab close)
+  useEffect(() => {
+    return () => {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
+    };
   }, []);
 
   return (
-    <SocketContext.Provider value={socket}>
+    <SocketContext.Provider value={{ socket, connect, disconnect }}>
       {children}
     </SocketContext.Provider>
   );
 };
 
-export const useSocket = () => useContext(SocketContext);
+export const useSocket = () => {
+  const context = useContext(SocketContext);
+  return context?.socket ?? null;
+};
+
+export const useSocketActions = () => {
+  const context = useContext(SocketContext);
+  return { connect: context?.connect, disconnect: context?.disconnect };
+};

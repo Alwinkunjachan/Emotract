@@ -3,11 +3,12 @@ import { useNavigate } from "react-router-dom";
 import { BiLogOut } from "react-icons/bi";
 import { logoutRoute } from "../utils/APIRoutes";
 import axiosInstance from "../utils/axiosInstance";
-import { useSocket } from "../context/SocketProvider";
+import { useSocket, useSocketActions } from "../context/SocketProvider";
 
 export default function Logout() {
   const navigate = useNavigate();
   const socket = useSocket();
+  const { disconnect } = useSocketActions();
 
   const handleLogout = async () => {
     try {
@@ -26,16 +27,15 @@ export default function Logout() {
       if (response.status === 200) {
         // Ensure the socket is connected before emitting logout
         if (socket && socket.connected) {
-          console.log("CLIENT LOGOUT");
           socket.emit("logout", userId);
-        } else {
-          console.warn("Socket not connected, logout event not sent");
+          disconnect(); // Close the WebSocket connection
         }
   
-      // Clear tokens and user data from localStorage
+      // Clear tokens and user data
       localStorage.removeItem("accessToken");
       localStorage.removeItem("refreshToken");
       localStorage.removeItem(import.meta.env.VITE_LOCALHOST_KEY);
+      sessionStorage.removeItem("currentChat");
   
       // Navigate to the login page
       navigate("/login");
