@@ -6,7 +6,6 @@ import { useRouter } from "@/routes/hooks";
 import { ChevronLeftIcon, MailWarning, ShieldAlert, UserRoundCheck } from "lucide-react";
 import { useParams } from "react-router-dom";
 import { useGetUserAnalytics, useRestrictUser, useUnblockUser } from "./queries/queries";
-import { PieWithLabel } from "@/components/charts/pie-with-label";
 import { convertToMonthDayCurrentFormat } from "@/utils/date";
 import { AlertModal } from "@/components/shared/alert-modal";
 import { useState } from "react";
@@ -125,7 +124,6 @@ export default function StudentDetailPage() {
           title={"User Analytics"}
           messageCount={userData?.messages.total}
           flaggedCount={userData?.messages.flagged}
-          processingMessagesCount={userData?.messages.processingMessages}
         />
         <div className="flex justify-end gap-3">
           <Button
@@ -201,20 +199,8 @@ export default function StudentDetailPage() {
           <CardContent className="mt-2">
             {userData?.messages.total > 0 ? (
             <div>
-              <div className="grid grid-cols-2 gap-4">
-              <PieWithLabel
-                name="Emotion classification with ML Models"
-                date={convertToMonthDayCurrentFormat(userData.user.createdAt)}
-                data={userData.mlEmotionsObj}
-              />
-              <PieWithLabel
-                name="Emotion classification with DL Models"
-                date={convertToMonthDayCurrentFormat(userData.user.createdAt)}
-                data={userData.dlEmotionsObj}
-              />
-            </div>
               <div className="mt-2">
-              <MessageTrendLineChart 
+              <MessageTrendLineChart
               name="Message Activity"
               date={convertToMonthDayCurrentFormat(userData.user.createdAt)}
               data={userData.messageTrend}

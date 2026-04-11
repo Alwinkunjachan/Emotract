@@ -2,12 +2,64 @@ import mongoose from 'mongoose';
 import Users from "../../models/Users.js";
 import Chats from '../../models/Chats.js';
 import Messages from '../../models/Messages.js';
-import MessageMetadata from '../../models/MessageMetadata.js';
-import { emotionColors } from '../../constants/index.js';
 import { sendParentEmail, warnUsersendEmail } from '../../utils/sendEmail.js';
 
 
-// get all users  
+// get dashboard stats
+export const getDashboardStats = async (req, res) => {
+  try {
+    const totalUsers = await Users.countDocuments({ is_active: true, role: "USER" });
+    const onlineUsers = await Users.countDocuments({ is_active: true, role: "USER", is_online: true });
+    const flaggedUsers = await Users.countDocuments({ is_active: true, role: "USER", is_flagged: true });
+    const totalMessages = await Messages.countDocuments({ is_active: true });
+    const flaggedMessages = await Messages.countDocuments({ is_active: true, is_flagged: true });
+    const totalChats = await Chats.countDocuments({ is_active: true });
+
+    // Message trend (last 30 days)
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    const messageTrend = await Messages.aggregate([
+      { $match: { is_active: true, createdAt: { $gte: thirtyDaysAgo } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          total: { $sum: 1 },
+          flagged: { $sum: { $cond: ["$is_flagged", 1, 0] } },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    // User registration trend (last 30 days)
+    const registrationTrend = await Users.aggregate([
+      { $match: { is_active: true, role: "USER", created_at: { $gte: thirtyDaysAgo } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$created_at" } },
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: { _id: 1 } },
+    ]);
+
+    return res.status(200).json({
+      totalUsers,
+      onlineUsers,
+      flaggedUsers,
+      totalMessages,
+      flaggedMessages,
+      totalChats,
+      messageTrend,
+      registrationTrend,
+    });
+  } catch (error) {
+    console.error("Error fetching dashboard stats:", error);
+    return res.status(500).json({ message: "Server error" });
+  }
+};
+
+// get all users
 export const getCompleteUsersDetails = async (req, res, next) => {
   try {
     const users = await Users.find({ is_active: true, role: "USER" })
@@ -114,13 +166,11 @@ export const deleteUser = async (req, res, next) => {
 export const getUserAnalytics = async (req, res) => {
   const userId = req.params.id;
 
-  // Validate userId
   if (!userId) {
     return res.status(400).json({ message: "User ID is required" });
   }
 
   try {
-    // Check if user exists and fetch basic info
     const user = await Users.findById(userId).select(
       'username email last_active created_at flag_count is_flagged role firstname lastname email parent_email is_online avatarImage age phone'
     );
@@ -128,13 +178,11 @@ export const getUserAnalytics = async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    // Get user's chat participation
     const chatCount = await Chats.countDocuments({
       participants: userId,
       is_active: true,
     });
 
-    // Get user's message stats
     const messageStats = await Messages.aggregate([
       { $match: { sender_id: new mongoose.Types.ObjectId(userId), is_active: true } },
       {
@@ -142,14 +190,12 @@ export const getUserAnalytics = async (req, res) => {
           _id: null,
           totalMessages: { $sum: 1 },
           flaggedMessages: { $sum: { $cond: ['$is_flagged', 1, 0] } },
-          processingMessages: { $sum: { $cond: [{ $eq: ['$processing_status', 'processing'] }, 1, 0] } },
         },
       },
     ]);
 
     const totalMessages = messageStats[0]?.totalMessages || 0;
     const flaggedMessages = messageStats[0]?.flaggedMessages || 0;
-    const processingMessages = messageStats[0]?.processingMessages || 0;
 
     const messageTrend = await Messages.aggregate([
       { $match: { sender_id: new mongoose.Types.ObjectId(userId), is_active: true } },
@@ -160,146 +206,9 @@ export const getUserAnalytics = async (req, res) => {
           flagged: { $sum: { $cond: ['$is_flagged', 1, 0] } },
         },
       },
-      { $sort: { _id: 1 } }, // Sort by date ascending
+      { $sort: { _id: 1 } },
     ]);
 
-    // Aggregate emotion counts from MessageMetadata for user's messages
-    const emotionStats = await MessageMetadata.aggregate([
-      {
-        $lookup: {
-          from: 'messages', // Join with Messages collection
-          localField: 'message_id',
-          foreignField: '_id',
-          as: 'message',
-        },
-      },
-      { $unwind: '$message' },
-      { $match: { 'message.sender_id': new mongoose.Types.ObjectId(userId) } },
-      {
-        $project: {
-          rfEmotion: '$random_forest.emotion',
-          lrEmotion: '$logistic_regression.emotion',
-          bertEmotion: '$bert.emotion',
-          robertaEmotion: '$roberta.emotion',
-        },
-      },
-      {
-        $facet: {
-          // Combine ML emotions (Random Forest + Logistic Regression)
-          mlEmotions: [
-            {
-              $group: {
-                _id: '$rfEmotion',
-                count: { $sum: 1 },
-              },
-            },
-            { $match: { _id: { $ne: null } } },
-            {
-              $unionWith: {
-                coll: 'messagemetadata',
-                pipeline: [
-                  {
-                    $lookup: {
-                      from: 'messages',
-                      localField: 'message_id',
-                      foreignField: '_id',
-                      as: 'message',
-                    },
-                  },
-                  { $unwind: '$message' },
-                  { $match: { 'message.sender_id': new mongoose.Types.ObjectId(userId) } },
-                  {
-                    $group: {
-                      _id: '$logistic_regression.emotion',
-                      count: { $sum: 1 },
-                    },
-                  },
-                  { $match: { _id: { $ne: null } } },
-                ],
-              },
-            },
-            {
-              $group: {
-                _id: '$_id',
-                totalCount: { $sum: '$count' },
-              },
-            },
-          ],
-          // Combine DL emotions (BERT + RoBERTa)
-          dlEmotions: [
-            {
-              $group: {
-                _id: '$bertEmotion',
-                count: { $sum: 1 },
-              },
-            },
-            { $match: { _id: { $ne: null } } },
-            {
-              $unionWith: {
-                coll: 'messagemetadata',
-                pipeline: [
-                  {
-                    $lookup: {
-                      from: 'messages',
-                      localField: 'message_id',
-                      foreignField: '_id',
-                      as: 'message',
-                    },
-                  },
-                  { $unwind: '$message' },
-                  { $match: { 'message.sender_id': new mongoose.Types.ObjectId(userId) } },
-                  {
-                    $group: {
-                      _id: '$roberta.emotion',
-                      count: { $sum: 1 },
-                    },
-                  },
-                  { $match: { _id: { $ne: null } } },
-                ],
-              },
-            },
-            {
-              $group: {
-                _id: '$_id',
-                totalCount: { $sum: '$count' },
-              },
-            },
-          ],
-        },
-      },
-    ]);
-
-    // Define a color mapping for emotions (customize as needed)
-
-
-    // Helper function to normalize counts to percentages
-    const normalizeToPercentage = (emotionArray) => {
-      const total = emotionArray.reduce((sum, item) => sum + item.totalCount, 0);
-      if (total === 0) return {};
-      return emotionArray.reduce((acc, item) => {
-        acc[item._id] = Number(((item.totalCount / total) * 100).toFixed(2));
-        return acc;
-      }, {});
-    };
-
-    // Normalize emotion counts to percentages
-    const mlEmotions = normalizeToPercentage(emotionStats[0].mlEmotions);
-    const dlEmotions = normalizeToPercentage(emotionStats[0].dlEmotions);
-
-    // Transform into desired format
-    const mlEmotionsObj = Object.entries(mlEmotions).map(([emotion, percentage]) => ({
-      emotion,
-      percentage,
-      color: emotionColors[emotion] || "#CCCCCC", // Default to grey if emotion not mapped
-    }));
-
-    const dlEmotionsObj = Object.entries(dlEmotions).map(([emotion, percentage]) => ({
-      emotion,
-      percentage,
-      color: emotionColors[emotion] || "#CCCCCC", // Default to grey if emotion not mapped
-    }));
-
-    // Construct the response
     const analytics = {
       user: {
         id: user._id,
@@ -324,10 +233,7 @@ export const getUserAnalytics = async (req, res) => {
       messages: {
         total: totalMessages,
         flagged: flaggedMessages,
-        processingMessages,
       },
-      mlEmotionsObj, // Combined Random Forest + Logistic Regression
-      dlEmotionsObj, // Combined BERT + RoBERTa
       messageTrend,
     };
 

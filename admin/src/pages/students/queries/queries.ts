@@ -1,11 +1,12 @@
-import { 
+import {
+  getDashboardStats,
   getGenderDetails,
   getSingleUser,
   getUserAnalytics,
-  getUsers, 
-  handleBlockUser, 
-  handleDeleteUser, 
-  handleUnBlockUser, 
+  getUsers,
+  handleBlockUser,
+  handleDeleteUser,
+  handleUnBlockUser,
   restrictUser
 } from '@/lib/api';
 import { RestrictUserProps } from '@/types';
@@ -14,6 +15,13 @@ import {
   useQueryClient, 
   useQuery 
 } from '@tanstack/react-query';
+
+export const useGetDashboardStats = () => {
+  return useQuery({
+    queryKey: ['dashboardStats'],
+    queryFn: async () => getDashboardStats()
+  });
+};
 
 export const useGetGenderDetails = () => {
   return useQuery({

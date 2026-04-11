@@ -1,4 +1,4 @@
-import { blockUserRoute, deleteUserRoute, unBlockUserRoute, usersRoute, singleUserRoute, userAnalyticsRoute, restrictUserRoute, genderDetailsRoute } from '@/constants/api';
+import { dashboardStatsRoute, blockUserRoute, deleteUserRoute, unBlockUserRoute, usersRoute, singleUserRoute, userAnalyticsRoute, restrictUserRoute, genderDetailsRoute } from '@/constants/api';
 import { RestrictUserProps } from '@/types';
 import axiosInstance from '@/utils/axiosInstance';
 import axios from 'axios';
@@ -12,6 +12,16 @@ import axios from 'axios';
 //       return error;
 //     }
 // }
+
+export async function getDashboardStats() {
+  try {
+    const res = await axiosInstance.get(dashboardStatsRoute);
+    return res.data;
+  } catch (error) {
+    console.log(error);
+    return error;
+  }
+}
 
 export async function getUsers(
   limit?: number

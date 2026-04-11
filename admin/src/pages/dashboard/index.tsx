@@ -12,11 +12,13 @@ import {
   TabsTrigger
 } from '@/components/ui/tabs.js';
 import { GenderChart } from '@/components/charts/gender-chart.js';
-import { useGetGenderDetails } from '../students/queries/queries';
+import { MessageTrendLineChart } from '@/components/charts/line-chart.js';
+import { useGetGenderDetails, useGetDashboardStats } from '../students/queries/queries';
+import { Users, MessageSquare, Shield, Activity } from 'lucide-react';
 
 export default function DashboardPage() {
-
-  const { data, isLoading } = useGetGenderDetails();
+  const { data: genderData, isLoading: genderLoading } = useGetGenderDetails();
+  const { data: stats, isLoading: statsLoading } = useGetDashboardStats();
 
   return (
     <>
@@ -24,141 +26,160 @@ export default function DashboardPage() {
       <div className="max-h-screen flex-1 space-y-4 overflow-y-auto p-4 pt-6 md:p-8">
         <div className="flex items-center justify-between space-y-2">
           <h2 className="text-3xl font-bold tracking-tight">
-            Hi, Welcome back 👋
+            Hi, Welcome back
           </h2>
         </div>
         <Tabs defaultValue="overview" className="space-y-4">
           <TabsList>
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="analytics" disabled>
-              Analytics
-            </TabsTrigger>
+            <TabsTrigger value="analytics">Analytics</TabsTrigger>
           </TabsList>
+
+          {/* ── Overview Tab ── */}
           <TabsContent value="overview" className="space-y-4">
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Total Revenue
-                  </CardTitle>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    className="h-4 w-4 text-muted-foreground"
-                  >
-                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                  </svg>
+                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">$45,231.89</div>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? '...' : stats?.totalUsers ?? 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Registered users</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Messages</CardTitle>
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? '...' : stats?.totalMessages ?? 0}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    +20.1% from last month
+                    Across all conversations
                   </p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Subscriptions
-                  </CardTitle>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    className="h-4 w-4 text-muted-foreground"
-                  >
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-                    <circle cx="9" cy="7" r="4" />
-                    <path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" />
-                  </svg>
+                  <CardTitle className="text-sm font-medium">Flagged Users</CardTitle>
+                  <Shield className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">+2350</div>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? '...' : stats?.flaggedUsers ?? 0}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    +180.1% from last month
+                    {stats?.flaggedMessages > 0
+                      ? `${stats.flaggedMessages} flagged messages`
+                      : 'No flagged messages'}
                   </p>
                 </CardContent>
               </Card>
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Sales</CardTitle>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    className="h-4 w-4 text-muted-foreground"
-                  >
-                    <rect width="20" height="14" x="2" y="5" rx="2" />
-                    <path d="M2 10h20" />
-                  </svg>
+                  <CardTitle className="text-sm font-medium">Active Now</CardTitle>
+                  <Activity className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <div className="text-2xl font-bold">+12,234</div>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? '...' : stats?.onlineUsers ?? 0}
+                  </div>
                   <p className="text-xs text-muted-foreground">
-                    +19% from last month
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">
-                    Active Now
-                  </CardTitle>
-                  <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    className="h-4 w-4 text-muted-foreground"
-                  >
-                    <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
-                  </svg>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">+573</div>
-                  <p className="text-xs text-muted-foreground">
-                    +201 since last hour
+                    {stats?.totalChats ?? 0} active conversations
                   </p>
                 </CardContent>
               </Card>
             </div>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols- lg:grid-cols- pb-5">
-              {isLoading ?
-              (
+            <div className="grid grid-cols-1 gap-4 pb-5">
+              {genderLoading ? (
                 "Loading ..."
-              ):(
-              <GenderChart data={data}/>
+              ) : (
+                <GenderChart data={genderData} />
               )}
-              {/* <Card className="col-span-4">
-                <AgeChart/>
-              </Card>
-              <Card className="col-span-4 md:col-span-3">
-                <CardHeader>
-                  <CardTitle>Recent Sales</CardTitle>
-                  <CardDescription>
-                    You made 265 sales this month.
-                  </CardDescription>
+            </div>
+          </TabsContent>
+
+          {/* ── Analytics Tab ── */}
+          <TabsContent value="analytics" className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Chats</CardTitle>
+                  <MessageSquare className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                  <RecentSales />
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? '...' : stats?.totalChats ?? 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Active conversations</p>
                 </CardContent>
-              </Card> */}
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Flagged Messages</CardTitle>
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? '...' : stats?.flaggedMessages ?? 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Content flagged for review</p>
+                </CardContent>
+              </Card>
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Flagged Users</CardTitle>
+                  <Shield className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">
+                    {statsLoading ? '...' : stats?.flaggedUsers ?? 0}
+                  </div>
+                  <p className="text-xs text-muted-foreground">Accounts under review</p>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 pb-5">
+              <MessageTrendLineChart
+                name="Message Trend"
+                date="Last 30 days"
+                data={stats?.messageTrend ?? []}
+              />
+              <Card>
+                <CardHeader>
+                  <CardTitle>User Registrations</CardTitle>
+                  <p className="text-sm text-muted-foreground">Last 30 days</p>
+                </CardHeader>
+                <CardContent>
+                  {statsLoading ? (
+                    "Loading ..."
+                  ) : stats?.registrationTrend?.length > 0 ? (
+                    <div className="space-y-3">
+                      {stats.registrationTrend.map((item: { _id: string; count: number }) => (
+                        <div key={item._id} className="flex items-center justify-between">
+                          <span className="text-sm text-muted-foreground">
+                            {new Date(item._id).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <div
+                              className="h-2 rounded-full bg-primary"
+                              style={{ width: `${Math.max(item.count * 40, 20)}px` }}
+                            />
+                            <span className="text-sm font-medium">{item.count}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-center text-muted-foreground">No registration data</p>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
         </Tabs>
