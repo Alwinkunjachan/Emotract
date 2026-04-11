@@ -1,0 +1,59 @@
+RUN Auto
+    docker-compose up
+
+RUN Manual
+    server:
+            cd server
+            npm start
+    fastapi:
+            cd fastapi
+            ./venv/scripts/activate
+            uvicorn main:app --reload
+    user:
+        cd user
+        npm run dev
+    admin:
+        cd admin
+        npm run dev
+
+Database Migration (run from server/)
+    cd server
+    npm run migrate          # Create collections, indexes, and admin user
+    npm run migrate:seed     # Above + seed 3 sample test users
+    npm run migrate:drop     # Drop all collections and re-create (DESTRUCTIVE)
+    npm run migrate:fresh    # Drop + re-create + seed sample data (DESTRUCTIVE)
+
+Dev URL
+    user React Js: http://localhost:5173
+    admin React Js: http://localhost:5174
+    backend Express Js: http://localhost:5000/
+    NLP Fastapi: http://localhost:8000/
+    Swagger API Docs: http://localhost:5000/api-docs
+
+
+docker-compose up --build
+docker-compose down
+
+
+(optional)
+pip install -r requirements.txt
+
+kill fastapi server
+    tasklist | findstr python
+    taskkill /PID <PID> /F
+    Replace <PID> with the process ID (e.g., taskkill /PID 12345 /F)
+
+
+Docker usefull commands
+
+# Run in background
+docker-compose up --build -d
+
+# View logs
+docker-compose logs -f
+
+# Stop everything
+docker-compose down
+
+# Stop and remove all data (MongoDB + Redis)
+docker-compose down -v

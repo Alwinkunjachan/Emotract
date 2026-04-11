@@ -1,0 +1,12 @@
+export const loginRoute = `/auth/login`;
+export const registerRoute = `/auth/register`;
+export const resetPasswordRoute = `/auth/reset-password`;
+export const forgotPasswordRoute = `/auth/forgot-password`;
+export const logoutRoute = `/auth/logout`;
+export const allUsersRoute = `/auth/all-users`;
+export const allContactUsersRoute = `/auth/all-contact-users`;
+export const userBlockRoute = `/auth/block-status`;
+export const sendMessageRoute = `/messages/addmsg`;
+export const recieveMessageRoute = `/messages/getmsg`;
+export const fetchCurrentOnlineStatusRoute = `/auth/online-status`;
+export const setAvatarRoute = `/auth/setavatar`;
