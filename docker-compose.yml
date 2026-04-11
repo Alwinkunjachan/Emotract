@@ -63,37 +63,15 @@ services:
       context: ./server
     ports:
       - "5001:5001"
-    env_file:
-      - ./server/.env
     environment:
-      - MONGO_URL=mongodb://mongo:27017/chat
-      - FASTAPI_URL=http://fastapi:8000
-      - REDIS_HOST=redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=
       - NODE_ENV=development
     depends_on:
       - mongo
       - redis
-      - fastapi
     volumes:
       - ./server:/app
       - /app/node_modules
     command: ["npm", "start"]
-    working_dir: /app
-
-  # FastAPI Backend Service
-  fastapi:
-    build:
-      context: ./fastapi
-    ports:
-      - "8000:8000"
-    environment:
-      - BACKEND_ENV=development
-    volumes:
-      - ./fastapi:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
-    restart: always
     working_dir: /app
 
 

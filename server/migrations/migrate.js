@@ -50,7 +50,6 @@ const collections = [
           is_online: { bsonType: "bool" },
           is_flagged: { bsonType: "bool" },
           flag_count: { bsonType: "number" },
-          processing_status: { enum: ["processing", "processed"] },
         },
       },
     },
@@ -94,7 +93,6 @@ const collections = [
           chat_id: { bsonType: "objectId" },
           sender_id: { bsonType: "objectId" },
           text: { bsonType: "string" },
-          processing_status: { enum: ["processing", "processed"] },
           message_status: { enum: ["pending", "sent", "delivered", "seen"] },
           is_flagged: { bsonType: "bool" },
         },
@@ -104,31 +102,8 @@ const collections = [
       { key: { chat_id: 1 }, options: { name: "idx_messages_chat" } },
       { key: { sender_id: 1 }, options: { name: "idx_messages_sender" } },
       { key: { chat_id: 1, sent_at: -1 }, options: { name: "idx_messages_chat_sent" } },
-      { key: { processing_status: 1 }, options: { name: "idx_messages_processing" } },
       { key: { is_flagged: 1 }, options: { name: "idx_messages_flagged" } },
       { key: { createdAt: -1 }, options: { name: "idx_messages_created" } },
-    ],
-  },
-  {
-    name: "messagemetadatas",
-    validator: {
-      $jsonSchema: {
-        bsonType: "object",
-        required: ["message_id"],
-        properties: {
-          message_id: { bsonType: "objectId" },
-          is_flagged: { bsonType: "bool" },
-          sentiment_score: { bsonType: "number" },
-        },
-      },
-    },
-    indexes: [
-      { key: { message_id: 1 }, options: { unique: true, name: "idx_metadata_message" } },
-      { key: { is_flagged: 1 }, options: { name: "idx_metadata_flagged" } },
-      { key: { sentiment_score: 1 }, options: { name: "idx_metadata_score" } },
-      { key: { "bert.emotion": 1 }, options: { name: "idx_metadata_bert_emotion" } },
-      { key: { "roberta.emotion": 1 }, options: { name: "idx_metadata_roberta_emotion" } },
-      { key: { createdAt: -1 }, options: { name: "idx_metadata_created" } },
     ],
   },
   {
