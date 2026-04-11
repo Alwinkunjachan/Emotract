@@ -1,8 +1,8 @@
 # API Reference - MERN-NLP-Emotract
 
-Base URL: `http://localhost:5000/api/v1`
+Base URL: `http://localhost:5001/api/v1`
 
-Swagger Docs: `http://localhost:5000/api-docs`
+Swagger Docs: `http://localhost:5001/api-docs`
 
 ---
 
@@ -343,39 +343,39 @@ Get detailed profile information for a specific user.
 
 ---
 
+### GET `/auth/dashboard-stats/`
+
+Get dashboard statistics (admin only).
+
+**Success Response (200):**
+```json
+{
+  "totalUsers": "number",
+  "onlineUsers": "number",
+  "flaggedUsers": "number",
+  "totalMessages": "number",
+  "flaggedMessages": "number",
+  "totalChats": "number",
+  "messageTrend": [{ "_id": "YYYY-MM-DD", "total": "number", "flagged": "number" }],
+  "registrationTrend": [{ "_id": "YYYY-MM-DD", "count": "number" }]
+}
+```
+
+---
+
 ### GET `/auth/get-user-analytics/:id`
 
-Get comprehensive analytics for a specific user including message stats, emotion distribution, and sentiment trends.
+Get analytics for a specific user including message stats and trends.
 
 **URL Params:** `id` - Target user's ObjectId
 
 **Success Response (200):**
 ```json
 {
-  "status": true,
-  "data": {
-    "user": { ... },
-    "chatCount": "number",
-    "messageStats": {
-      "total": "number",
-      "flagged": "number",
-      "processing": "number"
-    },
-    "messageTrend": [
-      { "date": "YYYY-MM-DD", "count": "number" }
-    ],
-    "emotionDistribution": {
-      "bert": { "joy": 10, "sadness": 3, ... },
-      "roberta": { ... },
-      "logistic_regression": { ... },
-      "random_forest": { ... }
-    },
-    "sentimentPercentage": {
-      "positive": "number (%)",
-      "negative": "number (%)",
-      "neutral": "number (%)"
-    }
-  }
+  "user": { ... },
+  "chats": { "total": "number" },
+  "messages": { "total": "number", "flagged": "number" },
+  "messageTrend": [{ "_id": "YYYY-MM-DD", "total": "number", "flagged": "number" }]
 }
 ```
 
@@ -517,85 +517,9 @@ Retrieve all messages between two users.
     "fromSelf": true | false,
     "message": "string (decrypted)",
     "sent_at": "ISO date",
-    "processing_status": "processing" | "processed",
     "is_flagged": false
   }
 ]
-```
-
----
-
-## NLP Service Routes
-
-Base URL: `http://localhost:8000`
-
-### GET `/`
-
-Health check endpoint.
-
-**Response:** `"Fast Api Server Running Dev mode..."`
-
----
-
-### GET `/api/v1/test/`
-
-Test endpoint.
-
-**Response:**
-```json
-{
-  "message": "Test route working"
-}
-```
-
----
-
-### POST `/api/v1/analyze/`
-
-Analyze text for emotions using all four ML models.
-
-**Request Body:**
-```json
-{
-  "text": "string"
-}
-```
-
-**Success Response (200):**
-```json
-{
-  "data": {
-    "bert": {
-      "emotion": "string",
-      "probability": "float (0-1)",
-      "sentiment": "positive" | "negative" | "neutral"
-    },
-    "roberta": {
-      "emotion": "string",
-      "probability": "float (0-1)",
-      "sentiment": "positive" | "negative" | "neutral"
-    },
-    "rf": {
-      "emotion": "string",
-      "probability": "float (0-1)",
-      "sentiment": "positive" | "negative" | "neutral"
-    },
-    "lr": {
-      "emotion": "string",
-      "probability": "float (0-1)",
-      "sentiment": "positive" | "negative" | "neutral"
-    }
-  },
-  "message": "Prediction of emotions and sentiments was successful"
-}
-```
-
-**Error Response (500):**
-```json
-{
-  "data": {},
-  "message": "Error while processing the text: <error details>"
-}
 ```
 
 ---
@@ -615,18 +539,20 @@ All endpoints may return these common error responses:
 
 ## WebSocket Events
 
-Connection URL: `http://localhost:5000`
+Connection URL: `http://localhost:5001`
 
 ### Client -> Server
 
-| Event       | Payload                          | Description              |
-|-------------|----------------------------------|--------------------------|
-| `add-user`  | `userId: string`                 | Register socket for user |
-| `send-msg`  | `{ to: string, msg: string }`    | Send message to user     |
-| `logout`    | `userId: string`                 | Disconnect user          |
+| Event       | Payload                              | Description              |
+|-------------|--------------------------------------|--------------------------|
+| `add-user`  | `userId: string`                     | Register socket for user |
+| `send-msg`  | `{ to: string, from: string, msg: string }` | Send message to user |
+| `logout`    | `userId: string`                     | Disconnect user          |
 
 ### Server -> Client
 
-| Event         | Payload            | Description               |
-|---------------|--------------------|---------------------------|
-| `msg-recieve` | `{ msg: string }`  | Incoming message delivery |
+| Event                | Payload                                      | Description                     |
+|----------------------|----------------------------------------------|---------------------------------|
+| `msg-recieve`        | `{ from: string, msg: string }`              | Incoming message delivery       |
+| `online-users`       | `string[]` (array of userIds)                | Initial online users list       |
+| `user-status-change` | `{ userId: string, isOnline: boolean, lastSeen?: string }` | Real-time status broadcast |

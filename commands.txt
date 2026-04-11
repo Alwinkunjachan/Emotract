@@ -1,14 +1,10 @@
 RUN Auto
-    docker-compose up
+    docker-compose up --build
 
 RUN Manual
     server:
             cd server
             npm start
-    fastapi:
-            cd fastapi
-            ./venv/scripts/activate
-            uvicorn main:app --reload
     user:
         cd user
         npm run dev
@@ -26,25 +22,14 @@ Database Migration (run from server/)
 Dev URL
     user React Js: http://localhost:5173
     admin React Js: http://localhost:5174
-    backend Express Js: http://localhost:5000/
-    NLP Fastapi: http://localhost:8000/
-    Swagger API Docs: http://localhost:5000/api-docs
+    backend Express Js: http://localhost:5001/
+    Swagger API Docs: http://localhost:5001/api-docs
 
+Default Admin Credentials
+    username: admin
+    password: admin123
 
-docker-compose up --build
-docker-compose down
-
-
-(optional)
-pip install -r requirements.txt
-
-kill fastapi server
-    tasklist | findstr python
-    taskkill /PID <PID> /F
-    Replace <PID> with the process ID (e.g., taskkill /PID 12345 /F)
-
-
-Docker usefull commands
+Docker useful commands
 
 # Run in background
 docker-compose up --build -d
