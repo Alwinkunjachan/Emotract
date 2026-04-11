@@ -1,7 +1,8 @@
 import express from "express";
-import { 
+import {
   blockUser,
   deleteUser,
+  getDashboardStats,
   getCompleteUsersDetails,
   getUserAnalytics,
   getUserDetails,
@@ -558,6 +559,8 @@ v1AuthRoutes.get("/block-status/:id", verifyAccessToken,  getUserBlockStatus);
 v1AuthRoutes.post("/logout", logOut);
 
 // ADMIN ROUTES
+v1AuthRoutes.get("/dashboard-stats/", verifyAccessToken, isAdmin, getDashboardStats);
+
 v1AuthRoutes.get("/complete-users/", verifyAccessToken, isAdmin, getCompleteUsersDetails);
 
 v1AuthRoutes.get("/user-gender-details/", verifyAccessToken, isAdmin, getUserGenderDetails);

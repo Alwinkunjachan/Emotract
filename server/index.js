@@ -3,13 +3,11 @@ import cors from "cors";
 import connectDB from "./config/db.js"; 
 import v1AuthRoutes from "./routes/v1/auth.js";
 import v1MessageRoutes from "./routes/v1/messages.js";
-import cron from "node-cron";
 import logger  from "./middleware/logger.js";
 import swaggerDocs from './config/swagger.js';
 import connectRedis from "./config/redis.js";
 import dotenv from "dotenv";
 import { setupSocket } from "./config/socket.js";
-import handleTime from "./utils/processEmotion.js";
 
 dotenv.config();
 
@@ -47,8 +45,6 @@ app.use("/api/v1/messages", v1MessageRoutes);
 // Swagger Docs Route
 swaggerDocs(app);
 
-// Run the cron job every 5 seconds to process new messages
-cron.schedule('*/10 * * * * *', handleTime);
 
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () =>
