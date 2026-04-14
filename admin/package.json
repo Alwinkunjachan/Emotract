@@ -17,6 +17,7 @@
     ]
   },
   "dependencies": {
+    "@auth0/auth0-react": "^2.16.1",
     "@eslint/config-array": "^0.19.0",
     "@eslint/object-schema": "^2.1.4",
     "@hookform/resolvers": "^3.3.4",
@@ -58,6 +59,7 @@
     "date-fns": "^3.6.0",
     "embla-carousel-react": "^8.0.0",
     "input-otp": "^1.2.2",
+    "jwt-decode": "^4.0.0",
     "lucide-react": "^0.358.0",
     "next-themes": "^0.3.0",
     "react": "^18.2.0",

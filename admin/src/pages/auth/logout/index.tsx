@@ -1,52 +1,29 @@
 import { logoutRoute } from "@/constants/api";
-import { useRouter } from "@/routes/hooks";
 import axiosInstance from "@/utils/axiosInstance";
+import { useAuth0 } from "@auth0/auth0-react";
 import { useEffect } from "react";
 
 export default function Logout() {
-    const router = useRouter();
-    
-    useEffect(()=> {
-        const handleLogout = async () => {
-            try {
-              // Get user data from localStorage
-              const userData = localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY);
-              if (!userData) {
-                console.error("User not found in localStorage");
-                return;
-              }
-          
-              const userId = JSON.parse(userData)._id;
-          
-              // Send the logout request
-              const response = await axiosInstance.post(logoutRoute, { userId });
-        
-              if (response.status === 200) {
-              // Clear tokens and user data from localStorage
-              localStorage.removeItem("accessToken");
-              localStorage.removeItem("refreshToken");
-              localStorage.removeItem(import.meta.env.VITE_LOCALHOST_KEY);
-          
-              // Navigate to the login page
-              router.push("/login");
-            } else {
-              console.error("Failed to log out. Server response:", response.data);
-              alert("An error occurred while logging out. Please try again.");
-            }
-            } catch (error) {
-              // Handle any errors
-              console.error("Logout error:", error);
-              alert("An error occurred while logging out. Please try again.");
-            }
-          };
+  const { logout } = useAuth0();
 
-          handleLogout();
-    }, [])
+  useEffect(() => {
+    const handleLogout = async () => {
+      try {
+        await axiosInstance.post(logoutRoute);
+      } catch (error) {
+        console.error("Logout error:", error);
+      }
+
+      // Auth0 logout — clears session and redirects
+      logout({ logoutParams: { returnTo: window.location.origin + "/login" } });
+    };
+
+    handleLogout();
+  }, [logout]);
 
   return (
-      <button className="flex cursor-pointer w-full p-2">
-        <span className='ml-2 text-white'>Logout</span>
-      </button>
+    <div className="flex h-screen w-full items-center justify-center">
+      <p>Logging out...</p>
+    </div>
   );
 }
-
