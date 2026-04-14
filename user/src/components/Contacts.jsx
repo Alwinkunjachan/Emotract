@@ -6,7 +6,7 @@ import Settings from "./ui/Settings";
 import { allUsersRoute } from "../utils/APIRoutes";
 import axiosInstance from "../utils/axiosInstance";
 
-export default function Contacts({ contacts, changeChat, unreadMessages = {}, onlineUsers = new Set() }) {
+export default function Contacts({ contacts, changeChat, unreadMessages = {}, onlineUsers = new Set(), currentUser }) {
   const [currentUserName, setCurrentUserName] = useState(undefined);
   const [currentUserImage, setCurrentUserImage] = useState(undefined);
   const [currentSelected, setCurrentSelected] = useState(undefined);
@@ -15,21 +15,11 @@ export default function Contacts({ contacts, changeChat, unreadMessages = {}, on
   const [searchContacts, setSearchContacts] = useState([]);
 
   useEffect(() => {
-    const fetchUserData = async () => {
-      const storedData = localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY);
-      if (storedData) {
-        try {
-          const data = JSON.parse(storedData);
-          setCurrentUserName(data.username);
-          setCurrentUserImage(data.avatarImage);
-        } catch (error) {
-          console.error("Error parsing user data:", error);
-        }
-      }
-    };
-  
-    fetchUserData();
-  }, []);
+    if (currentUser) {
+      setCurrentUserName(currentUser.username);
+      setCurrentUserImage(currentUser.avatarImage);
+    }
+  }, [currentUser]);
 
   useEffect(() => {
     console.log("Updated contacts in Contacts component:", contacts);
@@ -41,18 +31,16 @@ export default function Contacts({ contacts, changeChat, unreadMessages = {}, on
   useEffect(() => {
     const fetchSearchContacts = async () => {
       try {
-        const storedData = localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY);
-        const currentUser = storedData ? JSON.parse(storedData) : null;
         if (currentUser) {
           const { data } = await axiosInstance.get(`${allUsersRoute}/${currentUser._id}`);
-          setSearchContacts(data); // Filter contacts based on search query
+          setSearchContacts(data);
         }
       } catch (error) {
         console.error("Error fetching contacts:", error);
       }
     };
     fetchSearchContacts();
-  }, []);
+  }, [currentUser]);
   
 
    // Filter contacts based on the search query

@@ -4,10 +4,18 @@ import { IoMdSend } from "react-icons/io";
 import styled from "styled-components";
 import Picker from "emoji-picker-react";
 
-export default function ChatInput({ handleSendMsg }) {
+export default function ChatInput({ handleSendMsg, autoFocus }) {
   const [msg, setMsg] = useState("");
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const emojiRef = useRef(null);
+  const inputRef = useRef(null);
+
+  // Auto-focus input when chat changes
+  useEffect(() => {
+    if (autoFocus && inputRef.current) {
+      inputRef.current.focus();
+    }
+  }, [autoFocus]);
 
   const handleEmojiPickerhideShow = () => {
     setShowEmojiPicker(!showEmojiPicker);
@@ -55,6 +63,7 @@ export default function ChatInput({ handleSendMsg }) {
       </div>
       <form className="input-container" onSubmit={sendChat}>
         <input
+          ref={inputRef}
           type="text"
           placeholder="Type your message here"
           onChange={(e) => setMsg(e.target.value)}

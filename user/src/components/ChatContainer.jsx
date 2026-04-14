@@ -7,7 +7,7 @@ import axiosInstance from "../utils/axiosInstance";
 import fallBackImage from "../assets/avatars/avatar.png"
 import { useSocket } from "../context/SocketProvider";
 
-export default function ChatContainer({ currentChat, handleContactAfterMessage, arrivalMessage, onlineUsers, lastSeenMap = {} }) {
+export default function ChatContainer({ currentChat, currentUser, handleContactAfterMessage, arrivalMessage, onlineUsers, lastSeenMap = {} }) {
   const [messages, setMessages] = useState([]);
   const scrollRef = useRef();
   const socket = useSocket();
@@ -29,39 +29,25 @@ export default function ChatContainer({ currentChat, handleContactAfterMessage, 
 
   useEffect(() => {
     const fetchMessages = async () => {
-      const storedData = localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY);
-      if (storedData) {
-        const data = JSON.parse(storedData);
-        if (data && currentChat) {
-          try {
-            const response = await axiosInstance.post(recieveMessageRoute, {
-              from: data._id,
-              to: currentChat._id,
-            });
-            setMessages(response.data);
-            
-          } catch (error) {
-            console.error("Error fetching messages:", error);
-          }
+      if (currentUser && currentChat) {
+        try {
+          const response = await axiosInstance.post(recieveMessageRoute, {
+            from: currentUser._id,
+            to: currentChat._id,
+          });
+          setMessages(response.data);
+        } catch (error) {
+          console.error("Error fetching messages:", error);
         }
       }
     };
-  
+
     fetchMessages();
-  }, [currentChat]);
+  }, [currentChat, currentUser]);
   
-
-  useEffect(() => {
-    const getCurrentChat = async () => {
-      if (currentChat) { 
-        await JSON.parse(localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY))._id;}
-    };
-
-    getCurrentChat();
-  }, [currentChat]);
 
   const handleSendMsg = async (msg) => {
-    const data = JSON.parse(localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY));
+    if (!currentUser) return;
   
     if (!socket) {
       console.error("Socket is not connected!");
@@ -70,12 +56,12 @@ export default function ChatContainer({ currentChat, handleContactAfterMessage, 
   
     socket.emit("send-msg", {
       to: currentChat._id,
-      from: data._id,
+      from: currentUser._id,
       msg,
     });
-  
+
     await axiosInstance.post(sendMessageRoute, {
-      from: data._id,
+      from: currentUser._id,
       to: currentChat._id,
       message: msg,
       is_group: false,
@@ -91,7 +77,7 @@ export default function ChatContainer({ currentChat, handleContactAfterMessage, 
 
     let last_message = {
       text: msg,
-      sender_id: data._id,
+      sender_id: currentUser._id,
       sent_at: new Date(),
     }
     handleContactAfterMessage({ ...currentChat, last_message })
@@ -150,7 +136,7 @@ export default function ChatContainer({ currentChat, handleContactAfterMessage, 
           );
         })}
       </div>
-      <ChatInput handleSendMsg={handleSendMsg} />
+      <ChatInput handleSendMsg={handleSendMsg} autoFocus={currentChat?._id} />
     </Container>
   );
 }
