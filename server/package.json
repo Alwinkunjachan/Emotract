@@ -7,9 +7,7 @@
   "scripts": {
     "start": "nodemon -L index.js --ignore './tests'",
     "migrate": "node migrations/migrate.js",
-    "migrate:seed": "node migrations/migrate.js --seed",
     "migrate:drop": "node migrations/migrate.js --drop",
-    "migrate:fresh": "node migrations/migrate.js --drop --seed",
     "migrate:auth0": "node migrations/migrateToAuth0.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },

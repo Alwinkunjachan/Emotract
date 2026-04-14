@@ -10,9 +10,7 @@
  */
 
 import mongoose from "mongoose";
-import bcrypt from "bcrypt";
 import dotenv from "dotenv";
-import { ManagementClient } from "auth0";
 
 dotenv.config();
 
@@ -20,7 +18,6 @@ const MONGO_URL =
   process.env.MONGO_URL || "mongodb://localhost:27017/chat";
 
 const args = process.argv.slice(2);
-const shouldSeed = args.includes("--seed");
 const shouldDrop = args.includes("--drop");
 
 // ─── Color helpers for console output ───────────────────────────────
@@ -116,7 +113,6 @@ async function migrate() {
   console.log(cyan("  MERN-NLP-Emotract Database Migration"));
   console.log(cyan("========================================\n"));
   console.log(`  MongoDB URL: ${yellow(MONGO_URL)}`);
-  console.log(`  Seed data:   ${shouldSeed ? green("Yes") : "No"}`);
   console.log(`  Drop first:  ${shouldDrop ? red("Yes (DESTRUCTIVE)") : "No"}\n`);
 
   let conn;
@@ -190,16 +186,6 @@ async function migrate() {
     }
   }
 
-  // ── Seed default admin ──
-  console.log("\nSeeding default admin...\n");
-  await seedAdmin(db);
-
-  // ── Seed sample data ──
-  if (shouldSeed) {
-    console.log("\nSeeding sample data...\n");
-    await seedSampleData(db);
-  }
-
   // ── Summary ──
   console.log(cyan("\n========================================"));
   console.log(cyan("  Migration Complete!"));
@@ -217,167 +203,6 @@ async function migrate() {
 
   await mongoose.disconnect();
   process.exit(0);
-}
-
-// ─── Seed: Default Admin ────────────────────────────────────────────
-async function seedAdmin(db) {
-  const usersCol = db.collection("users");
-
-  const adminExists = await usersCol.findOne({ role: "ADMIN" });
-  if (adminExists) {
-    console.log(`  ${yellow("Skipped")} Admin already exists (${adminExists.username})`);
-    return;
-  }
-
-  const username = process.env.ADMIN_USERNAME;
-  const password = process.env.ADMIN_PASSWORD;
-  const email = process.env.ADMIN_EMAIL;
-  const phone = process.env.ADMIN_PHONE || "9999999999";
-
-  if (!username || !password || !email) {
-    console.log(
-      `  ${red("Skipped")} Admin creation — set ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_EMAIL in .env`
-    );
-    return;
-  }
-
-  // Create admin in Auth0
-  let auth0Id = null;
-  const auth0Domain = process.env.AUTH0_DOMAIN;
-  const auth0ClientId = process.env.AUTH0_M2M_CLIENT_ID;
-  const auth0ClientSecret = process.env.AUTH0_M2M_CLIENT_SECRET;
-
-  if (auth0Domain && auth0ClientId && auth0ClientSecret) {
-    try {
-      const auth0 = new ManagementClient({
-        domain: auth0Domain,
-        clientId: auth0ClientId,
-        clientSecret: auth0ClientSecret,
-      });
-
-      const auth0User = await auth0.users.create({
-        connection: "Username-Password-Authentication",
-        email,
-        username,
-        password,
-        name: "Super Admin",
-      });
-
-      auth0Id = auth0User.data.user_id;
-      console.log(`  ${green("Created")} Admin in Auth0: ${auth0Id}`);
-
-      // Assign ADMIN role
-      const roles = await auth0.roles.getAll({ name_filter: "ADMIN" });
-      if (roles.data.length > 0) {
-        await auth0.users.assignRoles({ id: auth0Id }, { roles: [roles.data[0].id] });
-        console.log(`  ${green("Assigned")} ADMIN role in Auth0`);
-      } else {
-        console.log(`  ${yellow("Warning")} ADMIN role not found in Auth0 — assign manually`);
-      }
-    } catch (err) {
-      const detail = err.body?.message || err.message;
-      console.log(`  ${yellow("Warning")} Auth0 admin creation failed: ${detail}`);
-      console.log(`  ${yellow("         ")} Admin will be created locally only. Run migrate:auth0 later.`);
-      console.log(`  ${yellow("         ")} If password policy error: Auth0 requires min 8 chars, uppercase, lowercase, number, and special character.`);
-    }
-  } else {
-    console.log(`  ${yellow("Warning")} Auth0 env vars not set — admin created locally only`);
-  }
-
-  await usersCol.insertOne({
-    username,
-    email,
-    auth0_id: auth0Id,
-    firstname: "Super",
-    lastname: "Admin",
-    age: 30,
-    gender: "M",
-    phone,
-    role: "ADMIN",
-    is_active: true,
-    is_online: false,
-    is_flagged: false,
-    flag_count: 0,
-    isAvatarImageSet: true,
-    avatarImage: "https://api.dicebear.com/9.x/bottts-neutral/svg",
-    imageUrl: "",
-    device_id: "NA",
-    socket_id: null,
-    age_verified: true,
-    last_active: new Date(),
-    created_at: new Date(),
-    updated_at: new Date(),
-  });
-
-  console.log(`  ${green("Created")} Default admin: ${username}`);
-}
-
-// ─── Seed: Sample Data (optional) ───────────────────────────────────
-async function seedSampleData(db) {
-  const usersCol = db.collection("users");
-
-  const sampleUsers = [
-    {
-      username: "john_doe",
-      email: "john@example.com",
-      firstname: "John",
-      lastname: "Doe",
-      age: 22,
-      gender: "M",
-      phone: "9876543210",
-      aadhaar_number: "2345 6789 0123",
-    },
-    {
-      username: "jane_smith",
-      email: "jane@example.com",
-      firstname: "Jane",
-      lastname: "Smith",
-      age: 20,
-      gender: "F",
-      phone: "9876543211",
-      aadhaar_number: "3456 7890 1234",
-    },
-    {
-      username: "alex_kumar",
-      email: "alex@example.com",
-      firstname: "Alex",
-      lastname: "Kumar",
-      age: 25,
-      gender: "M",
-      phone: "9876543212",
-      aadhaar_number: "4567 8901 2345",
-    },
-  ];
-
-  for (const user of sampleUsers) {
-    const exists = await usersCol.findOne({ username: user.username });
-    if (exists) {
-      console.log(`  ${yellow("Skipped")} ${user.username} (already exists)`);
-      continue;
-    }
-
-    await usersCol.insertOne({
-      ...user,
-      role: "USER",
-      is_active: true,
-      is_online: false,
-      is_flagged: false,
-      flag_count: 0,
-      isAvatarImageSet: false,
-      avatarImage: "",
-      imageUrl: "",
-      device_id: "NA",
-      socket_id: null,
-      age_verified: user.age >= 18,
-      parent_email: "",
-      aadhaar_number: user.aadhaar_number,
-      last_active: new Date(),
-      created_at: new Date(),
-      updated_at: new Date(),
-    });
-
-    console.log(`  ${green("Created")} Sample user: ${user.username}`);
-  }
 }
 
 // ─── Run ────────────────────────────────────────────────────────────
