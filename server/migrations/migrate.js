@@ -12,6 +12,7 @@
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import dotenv from "dotenv";
+import { ManagementClient } from "auth0";
 
 dotenv.config();
 
@@ -35,11 +36,11 @@ const collections = [
     validator: {
       $jsonSchema: {
         bsonType: "object",
-        required: ["username", "email", "password", "firstname", "lastname", "age", "phone"],
+        required: ["username", "email"],
         properties: {
           username: { bsonType: "string", minLength: 3, maxLength: 20 },
           email: { bsonType: "string" },
-          password: { bsonType: "string", minLength: 8 },
+          auth0_id: { bsonType: ["string", "null"] },
           firstname: { bsonType: "string" },
           lastname: { bsonType: "string" },
           age: { bsonType: "number" },
@@ -56,11 +57,12 @@ const collections = [
     indexes: [
       { key: { username: 1 }, options: { unique: true, name: "idx_users_username" } },
       { key: { email: 1 }, options: { unique: true, name: "idx_users_email" } },
-      { key: { phone: 1 }, options: { unique: true, name: "idx_users_phone" } },
+      { key: { phone: 1 }, options: { unique: true, sparse: true, name: "idx_users_phone" } },
       { key: { aadhaar_number: 1 }, options: { unique: true, sparse: true, name: "idx_users_aadhaar" } },
       { key: { role: 1 }, options: { name: "idx_users_role" } },
       { key: { is_active: 1 }, options: { name: "idx_users_active" } },
       { key: { is_flagged: 1 }, options: { name: "idx_users_flagged" } },
+      { key: { auth0_id: 1 }, options: { unique: true, sparse: true, name: "idx_users_auth0id" } },
       { key: { created_at: -1 }, options: { name: "idx_users_created" } },
     ],
   },
@@ -104,25 +106,6 @@ const collections = [
       { key: { chat_id: 1, sent_at: -1 }, options: { name: "idx_messages_chat_sent" } },
       { key: { is_flagged: 1 }, options: { name: "idx_messages_flagged" } },
       { key: { createdAt: -1 }, options: { name: "idx_messages_created" } },
-    ],
-  },
-  {
-    name: "passwordresets",
-    validator: {
-      $jsonSchema: {
-        bsonType: "object",
-        required: ["userId", "token", "expiresAt"],
-        properties: {
-          userId: { bsonType: "objectId" },
-          token: { bsonType: "string" },
-          expiresAt: { bsonType: "date" },
-        },
-      },
-    },
-    indexes: [
-      { key: { userId: 1 }, options: { name: "idx_pwdreset_user" } },
-      { key: { token: 1 }, options: { unique: true, name: "idx_pwdreset_token" } },
-      { key: { expiresAt: 1 }, options: { expireAfterSeconds: 0, name: "idx_pwdreset_ttl" } },
     ],
   },
 ];
@@ -258,12 +241,53 @@ async function seedAdmin(db) {
     return;
   }
 
-  const hashedPassword = await bcrypt.hash(password, 10);
+  // Create admin in Auth0
+  let auth0Id = null;
+  const auth0Domain = process.env.AUTH0_DOMAIN;
+  const auth0ClientId = process.env.AUTH0_M2M_CLIENT_ID;
+  const auth0ClientSecret = process.env.AUTH0_M2M_CLIENT_SECRET;
+
+  if (auth0Domain && auth0ClientId && auth0ClientSecret) {
+    try {
+      const auth0 = new ManagementClient({
+        domain: auth0Domain,
+        clientId: auth0ClientId,
+        clientSecret: auth0ClientSecret,
+      });
+
+      const auth0User = await auth0.users.create({
+        connection: "Username-Password-Authentication",
+        email,
+        username,
+        password,
+        name: "Super Admin",
+      });
+
+      auth0Id = auth0User.data.user_id;
+      console.log(`  ${green("Created")} Admin in Auth0: ${auth0Id}`);
+
+      // Assign ADMIN role
+      const roles = await auth0.roles.getAll({ name_filter: "ADMIN" });
+      if (roles.data.length > 0) {
+        await auth0.users.assignRoles({ id: auth0Id }, { roles: [roles.data[0].id] });
+        console.log(`  ${green("Assigned")} ADMIN role in Auth0`);
+      } else {
+        console.log(`  ${yellow("Warning")} ADMIN role not found in Auth0 — assign manually`);
+      }
+    } catch (err) {
+      const detail = err.body?.message || err.message;
+      console.log(`  ${yellow("Warning")} Auth0 admin creation failed: ${detail}`);
+      console.log(`  ${yellow("         ")} Admin will be created locally only. Run migrate:auth0 later.`);
+      console.log(`  ${yellow("         ")} If password policy error: Auth0 requires min 8 chars, uppercase, lowercase, number, and special character.`);
+    }
+  } else {
+    console.log(`  ${yellow("Warning")} Auth0 env vars not set — admin created locally only`);
+  }
 
   await usersCol.insertOne({
     username,
     email,
-    password: hashedPassword,
+    auth0_id: auth0Id,
     firstname: "Super",
     lastname: "Admin",
     age: 30,
@@ -274,11 +298,10 @@ async function seedAdmin(db) {
     is_online: false,
     is_flagged: false,
     flag_count: 0,
-    isAvatarImageSet: false,
-    avatarImage: "",
+    isAvatarImageSet: true,
+    avatarImage: "https://api.dicebear.com/9.x/bottts-neutral/svg",
     imageUrl: "",
     device_id: "NA",
-    clerk_id: "NA",
     socket_id: null,
     age_verified: true,
     last_active: new Date(),
@@ -326,8 +349,6 @@ async function seedSampleData(db) {
     },
   ];
 
-  const hashedPassword = await bcrypt.hash("password123", 10);
-
   for (const user of sampleUsers) {
     const exists = await usersCol.findOne({ username: user.username });
     if (exists) {
@@ -337,7 +358,6 @@ async function seedSampleData(db) {
 
     await usersCol.insertOne({
       ...user,
-      password: hashedPassword,
       role: "USER",
       is_active: true,
       is_online: false,
@@ -347,7 +367,6 @@ async function seedSampleData(db) {
       avatarImage: "",
       imageUrl: "",
       device_id: "NA",
-      clerk_id: "NA",
       socket_id: null,
       age_verified: user.age >= 18,
       parent_email: "",
