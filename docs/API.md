@@ -1,4 +1,4 @@
-# API Reference - MERN-NLP-Emotract
+# API Reference - Emotract
 
 Base URL: `http://localhost:5001/api/v1`
 
@@ -8,76 +8,33 @@ Swagger Docs: `http://localhost:5001/api-docs`
 
 ## Authentication
 
-All protected endpoints require the `Authorization` header:
+All protected endpoints require an **Auth0 access token** in the `Authorization` header:
 ```
-Authorization: Bearer <access_token>
+Authorization: Bearer <auth0_access_token>
 ```
 
-Admin endpoints additionally require the user to have `role: "ADMIN"`.
+Tokens are obtained via the Auth0 SDK (`getAccessTokenSilently()`). The backend validates them using Auth0's JWKS endpoint (RS256).
+
+Admin endpoints additionally require the user to have `role: "ADMIN"` in the local database.
 
 ---
 
 ## Auth Routes (`/auth`)
 
-### POST `/auth/login`
+### PATCH `/auth/complete-profile` (Protected)
 
-Authenticate a user and receive JWT tokens.
-
-**Request Body:**
-```json
-{
-  "username": "string",
-  "password": "string",
-  "role": "USER" | "ADMIN"
-}
-```
-
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "accessToken": "eyJhbGciOiJIUzI1NiIs...",
-  "refreshToken": "eyJhbGciOiJIUzI1NiIs...",
-  "user": {
-    "_id": "ObjectId",
-    "username": "string",
-    "email": "string",
-    "firstname": "string",
-    "lastname": "string",
-    "isAvatarImageSet": false,
-    "avatarImage": "",
-    "role": "USER"
-  }
-}
-```
-
-**Error Response (400/401):**
-```json
-{
-  "msg": "Incorrect Username or Password",
-  "status": false
-}
-```
-
----
-
-### POST `/auth/register`
-
-Register a new user account.
+Complete the user's profile after Auth0 signup. Required on first login.
 
 **Request Body:**
 ```json
 {
-  "username": "string (3-20 chars)",
-  "email": "string",
-  "password": "string (min 8 chars)",
   "firstname": "string",
   "lastname": "string",
-  "age": "number",
-  "gender": "M" | "F" | "O",
   "phone": "string (10 digits)",
-  "parent_email": "string",
-  "aadhaar_number": "string (format: XXXX XXXX XXXX)"
+  "aadhaar_number": "string (format: XXXX XXXX XXXX)",
+  "parent_email": "string (email)",
+  "age": "number",
+  "gender": "M" | "F" | "O"
 }
 ```
 
@@ -89,103 +46,65 @@ Register a new user account.
 }
 ```
 
-**Error Response (400):**
-```json
-{
-  "msg": "Username already used",
-  "status": false
-}
-```
-
 ---
 
-### POST `/auth/logout`
+### GET `/auth/me` (Protected)
 
-Log out the current user. Removes refresh token from Redis.
-
-**Request Body:**
-```json
-{
-  "userId": "ObjectId"
-}
-```
+Get the authenticated user's full profile from MongoDB.
 
 **Success Response (200):**
 ```json
 {
   "status": true,
-  "msg": "User logged out"
+  "user": {
+    "_id": "ObjectId",
+    "auth0_id": "auth0|...",
+    "username": "string",
+    "email": "string",
+    "firstname": "string",
+    "lastname": "string",
+    "role": "USER" | "ADMIN",
+    "is_profile_complete": true,
+    "isAvatarImageSet": false,
+    "avatarImage": "",
+    "is_online": false,
+    "is_flagged": false
+  }
 }
 ```
 
 ---
 
-### POST `/auth/refresh-token`
+### POST `/auth/logout` (Protected)
 
-Refresh an expired access token.
-
-**Request Body:**
-```json
-{
-  "refreshToken": "string"
-}
-```
+Log out the current user. Updates online status in MongoDB.
 
 **Success Response (200):**
 ```json
 {
-  "accessToken": "new_access_token"
-}
-```
-
-**Error Response (403):**
-```json
-{
-  "msg": "Invalid refresh token"
+  "message": "Logged out successfully"
 }
 ```
 
 ---
 
-### POST `/auth/forgot-password`
+### POST `/auth/auth0-webhook` (Public, secret-protected)
 
-Request a password reset email.
+Webhook for Auth0 to notify the backend when a user registers. For production use with a publicly accessible backend.
+
+**Headers:**
+```
+x-auth0-webhook-secret: <AUTH0_WEBHOOK_SECRET>
+```
 
 **Request Body:**
 ```json
 {
-  "email": "string"
-}
-```
-
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "msg": "Password reset link sent to your email"
-}
-```
-
----
-
-### POST `/auth/reset-password/:token`
-
-Reset password using the token from the email link.
-
-**URL Params:** `token` - Password reset token
-
-**Request Body:**
-```json
-{
-  "password": "string (min 8 chars)"
-}
-```
-
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "msg": "Password reset successful"
+  "auth0_id": "auth0|...",
+  "email": "string",
+  "username": "string",
+  "firstname": "string",
+  "lastname": "string"
 }
 ```
 
@@ -193,11 +112,9 @@ Reset password using the token from the email link.
 
 ## User Routes (`/auth`) - Protected
 
-All routes below require `Authorization: Bearer <token>`.
-
 ### GET `/auth/all-users/:id`
 
-Get all active users except the authenticated user. Used for user discovery/search.
+Get all active users with completed profiles (excluding the current user). Used for contact search.
 
 **URL Params:** `id` - Current user's ObjectId
 
@@ -208,8 +125,7 @@ Get all active users except the authenticated user. Used for user discovery/sear
     "_id": "ObjectId",
     "username": "string",
     "email": "string",
-    "avatarImage": "string",
-    "isAvatarImageSet": true
+    "avatarImage": "string"
   }
 ]
 ```
@@ -229,10 +145,11 @@ Get users the current user has active chats with, including last message.
     "_id": "ObjectId",
     "username": "string",
     "avatarImage": "string",
+    "last_active": "ISO date",
     "lastMessage": {
       "text": "string",
-      "sender_id": "ObjectId",
-      "sent_at": "ISO date"
+      "sender": "You" | "Them",
+      "sentAt": "ISO date"
     }
   }
 ]
@@ -267,13 +184,10 @@ Set or update the user's avatar image.
 
 Check if a specific user is currently online.
 
-**URL Params:** `id` - Target user's ObjectId
-
 **Success Response (200):**
 ```json
 {
-  "status": true,
-  "isOnline": true | false
+  "is_online": true | false
 }
 ```
 
@@ -283,13 +197,10 @@ Check if a specific user is currently online.
 
 Check if a user account is blocked/flagged.
 
-**URL Params:** `id` - Target user's ObjectId
-
 **Success Response (200):**
 ```json
 {
-  "status": true,
-  "isBlocked": true | false
+  "is_blocked": true | false
 }
 ```
 
@@ -297,55 +208,11 @@ Check if a user account is blocked/flagged.
 
 ## Admin Routes (`/auth`) - Protected + Admin Only
 
-All routes below require `Authorization: Bearer <token>` AND `role: "ADMIN"`.
-
-### GET `/auth/complete-users/`
-
-Get all users with detailed information for the admin dashboard.
-
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "users": [
-    {
-      "_id": "ObjectId",
-      "username": "string",
-      "email": "string",
-      "firstname": "string",
-      "lastname": "string",
-      "age": "number",
-      "gender": "string",
-      "is_flagged": false,
-      "flag_count": 0,
-      "is_active": true,
-      "created_at": "ISO date"
-    }
-  ]
-}
-```
-
----
-
-### GET `/auth/get-user-details/:id`
-
-Get detailed profile information for a specific user.
-
-**URL Params:** `id` - Target user's ObjectId
-
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "user": { ... }
-}
-```
-
----
+All routes below require `role: "ADMIN"`.
 
 ### GET `/auth/dashboard-stats/`
 
-Get dashboard statistics (admin only).
+Get dashboard statistics.
 
 **Success Response (200):**
 ```json
@@ -363,21 +230,21 @@ Get dashboard statistics (admin only).
 
 ---
 
+### GET `/auth/complete-users/`
+
+Get all users with detailed information.
+
+---
+
+### GET `/auth/get-user-details/:id`
+
+Get detailed profile for a specific user.
+
+---
+
 ### GET `/auth/get-user-analytics/:id`
 
 Get analytics for a specific user including message stats and trends.
-
-**URL Params:** `id` - Target user's ObjectId
-
-**Success Response (200):**
-```json
-{
-  "user": { ... },
-  "chats": { "total": "number" },
-  "messages": { "total": "number", "flagged": "number" },
-  "messageTrend": [{ "_id": "YYYY-MM-DD", "total": "number", "flagged": "number" }]
-}
-```
 
 ---
 
@@ -385,36 +252,11 @@ Get analytics for a specific user including message stats and trends.
 
 Get user registration statistics grouped by gender and date.
 
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "data": [
-    {
-      "date": "YYYY-MM-DD",
-      "male": "number",
-      "female": "number",
-      "other": "number"
-    }
-  ]
-}
-```
-
 ---
 
 ### PATCH `/auth/block-user/:id`
 
 Block/flag a user account.
-
-**URL Params:** `id` - Target user's ObjectId
-
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "msg": "User blocked successfully"
-}
-```
 
 ---
 
@@ -422,53 +264,26 @@ Block/flag a user account.
 
 Unblock/unflag a user account.
 
-**URL Params:** `id` - Target user's ObjectId
-
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "msg": "User unblocked successfully"
-}
-```
-
 ---
 
 ### DELETE `/auth/delete-user/:id`
 
 Soft delete a user (sets `is_active: false`).
 
-**URL Params:** `id` - Target user's ObjectId
-
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "msg": "User deleted successfully"
-}
-```
-
 ---
 
 ### POST `/auth/restrict-user`
 
-Send a warning or block notification email to a user or their parent/guardian.
+Send warning or block notification email to user or parent/guardian.
 
 **Request Body:**
 ```json
 {
-  "userId": "ObjectId",
-  "type": "warn" | "block",
-  "email": "string (user or parent email)",
-  "message": "string (optional custom message)"
-}
-```
-
-**Success Response (200):**
-```json
-{
-  "status": true,
-  "msg": "Email sent successfully"
+  "type": "INFORM_PARENT_AND_BLOCK" | "WARN_CHILD",
+  "id": "ObjectId",
+  "email": "string",
+  "parent_email": "string",
+  "child_name": "string"
 }
 ```
 
@@ -485,14 +300,8 @@ Send a new message. Creates or updates the chat between participants.
 {
   "from": "ObjectId (sender)",
   "to": "ObjectId (recipient)",
-  "message": "string (plaintext - encrypted server-side)"
-}
-```
-
-**Success Response (200):**
-```json
-{
-  "msg": "Message added successfully"
+  "message": "string (plaintext - encrypted server-side)",
+  "is_group": false
 }
 ```
 
@@ -524,35 +333,34 @@ Retrieve all messages between two users.
 
 ---
 
-## Error Responses
-
-All endpoints may return these common error responses:
-
-| Status | Description                  | Body                                              |
-|--------|------------------------------|---------------------------------------------------|
-| 401    | Unauthorized (no/bad token)  | `{ "msg": "Access Denied. No token provided" }`   |
-| 403    | Forbidden (not admin/expired)| `{ "msg": "Access Denied! Only admins..." }`      |
-| 404    | Resource not found           | `{ "msg": "User not found", "status": false }`    |
-| 500    | Internal server error        | `{ "msg": "Internal Server Error" }`              |
-
----
-
 ## WebSocket Events
 
 Connection URL: `http://localhost:5001`
 
+Authentication: Auth0 access token passed via `socket.handshake.auth.token`
+
 ### Client -> Server
 
-| Event       | Payload                              | Description              |
-|-------------|--------------------------------------|--------------------------|
-| `add-user`  | `userId: string`                     | Register socket for user |
-| `send-msg`  | `{ to: string, from: string, msg: string }` | Send message to user |
-| `logout`    | `userId: string`                     | Disconnect user          |
+| Event       | Payload                    | Description              |
+|-------------|----------------------------|--------------------------|
+| `send-msg`  | `{ to: string, msg: string }` | Send message (sender auto-verified from token) |
+| `logout`    | —                          | User logout (userId from socket) |
 
 ### Server -> Client
 
 | Event                | Payload                                      | Description                     |
 |----------------------|----------------------------------------------|---------------------------------|
-| `msg-recieve`        | `{ from: string, msg: string }`              | Incoming message delivery       |
-| `online-users`       | `string[]` (array of userIds)                | Initial online users list       |
+| `online-users`       | `string[]` (array of userIds)                | Initial online users list (on connect) |
 | `user-status-change` | `{ userId: string, isOnline: boolean, lastSeen?: string }` | Real-time status broadcast |
+| `msg-recieve`        | `{ from: string, msg: string }`              | Incoming message delivery       |
+
+---
+
+## Error Responses
+
+| Status | Description                  | Body                                              |
+|--------|------------------------------|---------------------------------------------------|
+| 401    | Unauthorized (invalid token) | HTML error page from express-oauth2-jwt-bearer     |
+| 403    | Forbidden (deactivated/not admin) | `{ "message": "..." }`                       |
+| 404    | User not found               | `{ "message": "User not found in local database" }` |
+| 500    | Internal server error        | `{ "message": "Internal server error" }`          |

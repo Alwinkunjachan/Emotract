@@ -125,7 +125,6 @@ Creating collections...
   Created chats
   Created messages
   Created messagemetadatas
-  Created passwordresets
 
 Creating indexes...
 
@@ -154,12 +153,10 @@ Seeding default admin...
 ## Step 8: Verify in Atlas Dashboard
 
 1. Go to **Deployment > Database** and click **"Browse Collections"**
-2. You should see the `chat` database with 5 collections:
+2. You should see the `chat` database with collections:
    - `users` (with the admin user)
    - `chats`
    - `messages`
-   - `messagemetadatas`
-   - `passwordresets`
 3. Click on `users` to verify the admin account was created
 
 ---
@@ -207,7 +204,6 @@ Run these from the `server/` directory:
 | `chats` | Conversations between users |
 | `messages` | Chat messages (encrypted at rest) |
 | `messagemetadatas` | NLP emotion analysis results |
-| `passwordresets` | Temporary password reset tokens (auto-expire) |
 
 ### Indexes
 
@@ -234,9 +230,7 @@ Run these from the `server/` directory:
 | messagemetadatas | `sentiment_score` | Sort/filter by sentiment |
 | messagemetadatas | `bert.emotion` | Query by BERT emotion |
 | messagemetadatas | `roberta.emotion` | Query by RoBERTa emotion |
-| passwordresets | `userId` | Find reset for user |
-| passwordresets | `token` (unique) | Lookup by token |
-| passwordresets | `expiresAt` (TTL) | Auto-delete expired tokens |
+| users | `auth0_id` (unique, sparse) | Auth0 user lookup |
 
 ### Validators
 

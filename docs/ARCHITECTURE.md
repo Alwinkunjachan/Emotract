@@ -1,4 +1,4 @@
-# Architecture - MERN-NLP-Emotract
+# Architecture - Emotract
 
 ## High-Level Architecture
 
@@ -13,7 +13,7 @@
 │  │  - Chat Interface    │       │  - Dashboard & Charts    │       │
 │  │  - Real-time msgs    │       │  - User Analytics        │       │
 │  │  - Online status     │       │  - Content Moderation    │       │
-│  │  - Last seen         │       │  - Admin auth            │       │
+│  │  - Auth0 login/SSO   │       │  - Auth0 admin login     │       │
 │  └──────────┬───────────┘       └────────────┬─────────────┘       │
 │             │ HTTP + WebSocket                │ HTTP                │
 └─────────────┼────────────────────────────────┼─────────────────────┘
@@ -24,37 +24,88 @@
 │                                                                     │
 │  ┌──────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │
 │  │  Routes   │  │ Controllers  │  │  Middleware   │  │  Socket.io│  │
-│  │  /auth    │→ │ user         │  │ JWT verify   │  │  Real-time│  │
-│  │  /messages│→ │ message      │  │ isAdmin      │  │  events   │  │
-│  │  /api-docs│  │ admin        │  │ logger       │  │           │  │
+│  │  /auth    │→ │ user         │  │ Auth0 JWT    │  │  Real-time│  │
+│  │  /messages│→ │ message      │  │ resolveUser  │  │  Auth0 JWT│  │
+│  │  /api-docs│  │ admin        │  │ isAdmin      │  │  verify   │  │
 │  └──────────┘  └──────┬───────┘  └──────────────┘  └───────────┘  │
 │                       │                                             │
 │  ┌────────────────────┼────────────────────────────────────────┐   │
 │  │                    │         SERVICES                        │   │
-│  │  ┌─────────────┐  │  ┌──────────────┐                      │   │
-│  │  │ AES-256     │  │  │ Nodemailer   │                      │   │
-│  │  │ Encryption  │  │  │ Email        │                      │   │
-│  │  │ /Decryption │  │  │ Service      │                      │   │
-│  │  └─────────────┘  │  └──────────────┘                      │   │
+│  │  ┌─────────────┐  │  ┌──────────────┐  ┌──────────────┐    │   │
+│  │  │ AES-256     │  │  │ Nodemailer   │  │ Auth0 Mgmt   │    │   │
+│  │  │ Encryption  │  │  │ Email        │  │ API Client   │    │   │
+│  │  │ /Decryption │  │  │ Service      │  │              │    │   │
+│  │  └─────────────┘  │  └──────────────┘  └──────────────┘    │   │
 │  └────────────────────┼────────────────────────────────────────┘   │
 └───────────────────────┼────────────────────────────────────────────┘
                         │
               ┌─────────┼───────────┐
               │         │           │
               ▼         ▼           ▼
-      ┌───────────┐ ┌────────┐
-      │  MongoDB   │ │ Redis  │
-      │            │ │        │
-      │ - Users    │ │ Refresh│
-      │ - Messages │ │ Tokens │
-      │ - Chats    │ │ (7d)   │
-      │ - PwdReset │ │        │
-      └───────────┘ └────────┘
+      ┌───────────┐          ┌──────────────┐
+      │  MongoDB   │          │   Auth0      │
+      │            │          │              │
+      │ - Users    │          │ - Identity   │
+      │ - Messages │          │ - SSO/OAuth  │
+      │ - Chats    │          │ - Passwords  │
+      └───────────┘          └──────────────┘
 ```
 
 ---
 
+## Authentication Flow
+
+### Signup (New User)
+
+```
+Browser                       Auth0                    Backend                 MongoDB
+   |                            |                        |                       |
+   |-- loginWithRedirect() ---->|                        |                       |
+   |                            |-- Universal Login UI   |                       |
+   |                            |   (Sign up tab)        |                       |
+   |                            |<-- user creates acct -->|                       |
+   |<-- redirect with code -----|                        |                       |
+   |                            |                        |                       |
+   |-- GET /auth/me (token) --->|                        |                       |
+   |                            |     verifyAccessToken  |                       |
+   |                            |     resolveUser:       |                       |
+   |                            |       user not found   |                       |
+   |                            |       fetch /userinfo  |                       |
+   |                            |       auto-provision --|-- create user ------->|
+   |                            |       (role from       |   (is_profile_complete|
+   |                            |        Origin header)  |    = false)           |
+   |<-- { user, is_profile_complete: false } ------------|                       |
+   |                            |                        |                       |
+   |-- redirect to /complete-profile                     |                       |
+   |-- PATCH /auth/complete-profile -------------------->|-- update user ------->|
+   |<-- { user, is_profile_complete: true } -------------|                       |
+   |                            |                        |                       |
+   |-- redirect to / (Chat)     |                        |                       |
+```
+
+### Role Assignment
+
+- Signup via **User App** (`:5173`) → `Origin: http://localhost:5173` → role = `USER`
+- Signup via **Admin App** (`:5174`) → `Origin: http://localhost:5174` → role = `ADMIN`
+
+---
+
 ## Socket.io Communication Flow
+
+### Connection Authentication
+
+```
+Browser                        Server
+   |                             |
+   |-- getAccessTokenSilently()  |
+   |-- io(host, { auth: token }) |
+   |                             |-- jose: jwtVerify(token, JWKS)
+   |                             |-- MongoDB: findOne({ auth0_id })
+   |                             |-- socket.userId = user._id
+   |                             |
+   |<-- "online-users" [ids] ----|
+   |                             |-- broadcast "user-status-change"
+```
 
 ### Online Status Flow
 
@@ -62,15 +113,12 @@
 User B logs in:
   Browser B                    Server                      Browser A
      |                           |                            |
-     |-- add-user(userIdB) ----->|                            |
+     |-- socket connects ------->|                            |
      |                           |-- DB: is_online=true       |
      |                           |-- Map: set(B, socketId)    |
      |<-- online-users([A,B]) ---|                            |
      |                           |-- user-status-change ------>|
      |                           |   {userId:B, isOnline:true} |
-     |                           |                            |
-     |                           |  (A's Contacts.jsx shows   |
-     |                           |   green dot on B's avatar)  |
 
 User B closes tab:
   Browser B                    Server                      Browser A
@@ -82,9 +130,6 @@ User B closes tab:
                                  |-- user-status-change ------>|
                                  |   {userId:B, isOnline:false,|
                                  |    lastSeen: timestamp}     |
-                                 |                            |
-                                 |  (A sees: green dot gone,  |
-                                 |   "Last seen today 2:30 PM")|
 ```
 
 ### Message Delivery Flow
@@ -94,18 +139,12 @@ User A sends message to User B:
   Browser A                    Server                      Browser B
      |                           |                            |
      |-- emit("send-msg", {  -->|                            |
-     |     to: B, from: A,      |                            |
-     |     msg: "Hello"})        |                            |
-     |                           |-- lookup B in onlineUsers  |
+     |     to: B, msg: "Hello"}) |                            |
+     |                           |-- sender = socket.userId   |
      |-- POST /messages/addmsg ->|-- encrypt & store in DB    |
      |                           |                            |
      |                           |-- emit("msg-recieve") ---->|
      |                           |   { from: A, msg: "Hello" }|
-     |                           |                            |
-     |                           |  (B's Chat.jsx checks:     |
-     |                           |   from === currentChat?    |
-     |                           |   Yes → show in chat       |
-     |                           |   No → unread badge + 1)   |
 ```
 
 ---
@@ -113,22 +152,21 @@ User A sends message to User B:
 ## Data Models
 
 ```
-┌──────────────┐       ┌──────────────┐       ┌────────────────────┐
-│    Users     │       │    Chats     │       │     Messages       │
-├──────────────┤       ├──────────────┤       ├────────────────────┤
-│ _id          │◄──┐   │ _id          │◄──────│ chat_id            │
-│ username     │   │   │ participants │───────►│ sender_id ─────────┼──►Users
-│ email        │   │   │ is_group     │       │ text (encrypted)   │
-│ password     │   ├───│ group_admins │       │ is_flagged         │
-│ role         │   │   │ last_message │       │ message_status     │
-│ is_flagged   │   │   └──────────────┘       └────────────────────┘
-│ is_online    │   │
-│ last_active  │   │   ┌──────────────────────┐
-│ socket_id    │   │   │  PasswordReset       │
-│ is_active    │   └───│  userId              │
-└──────────────┘       │  token               │
-                       │  expiresAt           │
-                       └──────────────────────┘
+┌──────────────────┐       ┌──────────────┐       ┌────────────────────┐
+│      Users       │       │    Chats     │       │     Messages       │
+├──────────────────┤       ├──────────────┤       ├────────────────────┤
+│ _id              │◄──┐   │ _id          │◄──────│ chat_id            │
+│ auth0_id         │   │   │ participants │───────►│ sender_id ─────────┼──►Users
+│ username         │   │   │ is_group     │       │ text (encrypted)   │
+│ email            │   ├───│ group_admins │       │ is_flagged         │
+│ role (USER/ADMIN)│   │   │ last_message │       │ message_status     │
+│ is_profile_complete│ │   └──────────────┘       └────────────────────┘
+│ is_flagged       │   │
+│ is_online        │   │
+│ last_active      │   │
+│ socket_id        │   │
+│ is_active        │   │
+└──────────────────┘   │
 ```
 
 ---
@@ -141,7 +179,8 @@ User A sends message to User B:
 | Framework      | React 19                   |
 | Build Tool     | Vite 6.1                   |
 | Styling        | Styled Components + Tailwind CSS |
-| HTTP           | Axios (with interceptors)  |
+| Auth           | Auth0 React SDK            |
+| HTTP           | Axios (with Auth0 token interceptors) |
 | WebSocket      | Socket.io Client           |
 
 ### Frontend (Admin App)
@@ -150,18 +189,18 @@ User A sends message to User B:
 | Framework      | React 18 + TypeScript      |
 | Build Tool     | Vite 5.1                   |
 | UI Components  | ShadCN UI (Radix + Tailwind) |
+| Auth           | Auth0 React SDK            |
 | State          | React Query v5 + Context   |
 | Charts         | Recharts                   |
 | Forms          | React Hook Form + Zod      |
-| HTTP           | Axios (with interceptors)  |
+| HTTP           | Axios (with Auth0 token interceptors) |
 
 ### Backend
 | Layer          | Technology                 |
 |----------------|----------------------------|
 | Framework      | Express.js 4.21            |
 | Database       | MongoDB (Mongoose 8.10)    |
-| Cache          | Redis 4.7                  |
-| Auth           | JWT + Bcrypt               |
+| Auth           | Auth0 (express-oauth2-jwt-bearer + jose) |
 | WebSocket      | Socket.io 4.8              |
 | Encryption     | AES-256-CBC (Node crypto)  |
 | Email          | Nodemailer                 |
@@ -172,4 +211,4 @@ User A sends message to User B:
 |----------------|----------------------------|
 | Containers     | Docker + Docker Compose    |
 | Database       | MongoDB (in Docker)        |
-| Cache/Sessions | Redis (in Docker)          |
+| Identity       | Auth0 (cloud)              |
