@@ -1,124 +1,131 @@
-import bcrypt from "bcrypt";
-import crypto from "crypto";
-import jwt from 'jsonwebtoken';
-import { sendResetEmail } from "../../utils/sendEmail.js";
 import Users from "../../models/Users.js";
-import PasswordReset from "../../models/PasswordReset.js";
-import { client } from "../../index.js";
 import Chats from "../../models/Chats.js";
 
-
-export const login = async (req, res, next) => {
+// Complete profile for auto-provisioned users (first login via Auth0)
+export const completeProfile = async (req, res, next) => {
   try {
-    const { username, password } = req.body;
-    const role = req.body.role || "USER"
-    
-    // Check if user exists
-    const user = await Users.findOne({ username, role });
+    const { firstname, lastname, phone, aadhaar_number, parent_email, age, gender } = req.body;
+    const userId = req.user.userId;
 
-    if (!user) 
-      return res.status(500).json({ message: "Incorrect Username", status: false });
-
-    // Validate password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) 
-      return res.status(500).json({ message: "Incorrect Username or Password", status: false });
-
-    // Generate Tokens
-    const accessToken = jwt.sign({ userId: user._id, role: user.role, }, process.env.JWT_SECRET, { expiresIn: "15m" });
-    const refreshToken = jwt.sign({ userId: user._id, role: user.role, }, process.env.JWT_SECRET, { expiresIn: "7d" });
-
-    if (!client.isOpen) {
-      await client.connect();
+    // Validate required fields
+    if (!firstname || !lastname || !phone || !aadhaar_number || !parent_email || !age || !gender) {
+      return res.status(400).json({ message: "All fields are required", status: false });
     }
-    
-    // Store refresh token in Redis
-    const response = await client.set(user._id.toString(), refreshToken, {
-        EX: 7 * 24 * 60 * 60,
-    })
 
-    if (response !== "OK") {
-      console.error("Error storing refresh token in Redis:", response);
-      return res.status(500).json({ message: "Error storing refresh token" });
+    // Validate aadhaar format
+    const aadhaarRegex = /^[2-9]{1}[0-9]{3}\s[0-9]{4}\s[0-9]{4}$/;
+    if (!aadhaarRegex.test(aadhaar_number)) {
+      return res.status(400).json({ message: "Invalid Aadhaar number format", status: false });
     }
-    
-    // Remove password field before sending user data
-    const userWithoutPassword = user.toObject();
-    delete userWithoutPassword.password;
 
-    return res.json({ status: true, message: "Login Successful", user: userWithoutPassword, accessToken, refreshToken });
-  } catch (error) {
-    console.error("Login error:", error);
-    res.status(500).json({ message: "Internal Server Error", status: false });
-  }
-};
-
-export const register = async (req, res, next) => {
-  try {
-    const { username, email, password, aadhaar_number, firstname, lastname, parent_email, age, phone } = req.body;
-    const role = req.body?.role?.toUpperCase() || "USER";
-
-    if (role === "ADMIN") {
-      return res.status(400).json({ message: "You can't register with an admin role" });
+    // Validate phone (10 digits)
+    if (!/^\d{10}$/.test(phone)) {
+      return res.status(400).json({ message: "Phone must be 10 digits", status: false });
     }
-    
-    const ageVerified = parseInt(age) >= 18;
-    
-    // Efficient single query to check existing user data
-    const existingUser = await Users.findOne({
-      $or: [{ username }, { email }, { phone }],
+
+    // Check phone and aadhaar uniqueness (excluding current user)
+    const existing = await Users.findOne({
+      _id: { $ne: userId },
+      $or: [{ phone }, { aadhaar_number }],
     });
 
-    if (existingUser) {
-      let msg = "User already exists";
-      if (existingUser.username === username) msg = "Username already used";
-      else if (existingUser.email === email) msg = "Email already used";
-      else if (existingUser.phone === phone) msg = "Phone number already used";
-
-      return res.status(409).json({ msg, status: false });
+    if (existing) {
+      const msg = existing.phone === phone ? "Phone number already used" : "Aadhaar number already used";
+      return res.status(409).json({ message: msg, status: false });
     }
 
-    // Hash password securely
-    let hashedPassword;
-    try {
-      hashedPassword = await bcrypt.hash(password, 10);
-    } catch (error) {
-      return res.status(500).json({ msg: "Error hashing password", status: false });
+    const parsedAge = parseInt(age);
+    const ageVerified = parsedAge >= 18;
+
+    const user = await Users.findByIdAndUpdate(
+      userId,
+      {
+        firstname,
+        lastname,
+        phone,
+        aadhaar_number,
+        parent_email,
+        age: parsedAge,
+        gender,
+        age_verified: ageVerified,
+        is_profile_complete: true,
+      },
+      { new: true }
+    ).select("-password");
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found", status: false });
     }
 
-    // Create new user
-    const user = await Users.create({
-      email,
-      username,
-      password: hashedPassword,
-      aadhaar_number,
-      firstname,
-      lastname,
-      parent_email,
-      age: parseInt(age),
-      phone,
-      imageUrl: "",
-      age_verified: ageVerified,
-    });
-
-    // Convert to object and remove password before sending response
-    const userResponse = user.toObject();
-    delete userResponse.password;
-
-    return res.status(201).json({ status: true, user: userResponse });
+    return res.json({ status: true, user });
   } catch (error) {
     next(error);
   }
 };
 
-// get all users exepct current user 
+// Auth0 Post User Registration webhook
+// Called by Auth0 Action whenever a new user signs up through Auth0 Universal Login
+export const auth0Webhook = async (req, res) => {
+  try {
+    const webhookSecret = process.env.AUTH0_WEBHOOK_SECRET;
+    if (webhookSecret && req.headers["x-auth0-webhook-secret"] !== webhookSecret) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    const { auth0_id, email, username, firstname, lastname } = req.body;
+
+    if (!auth0_id || !email) {
+      return res.status(400).json({ message: "auth0_id and email are required" });
+    }
+
+    // Check if user already exists
+    const existingUser = await Users.findOne({ auth0_id });
+    if (existingUser) {
+      return res.status(200).json({ message: "User already exists", user_id: existingUser._id });
+    }
+
+    const user = await Users.create({
+      auth0_id,
+      email,
+      username: username || email.split("@")[0],
+      firstname: firstname || "User",
+      lastname: lastname || "",
+      age: 18,
+      phone: "0000000000",
+      gender: "M",
+      role: "USER",
+      is_active: true,
+    });
+
+    console.log(`Webhook: Created local user for Auth0 ID ${auth0_id}`);
+    return res.status(201).json({ message: "User created", user_id: user._id });
+  } catch (error) {
+    console.error("Webhook error:", error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+};
+
+// Returns the authenticated user's full profile
+export const getMe = async (req, res, next) => {
+  try {
+    const user = await Users.findById(req.user.userId).select("-password");
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    return res.json({ status: true, user });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// Get all users except current user
 export const getAllUsers = async (req, res, next) => {
   try {
-    const users = await Users.find({ 
-      _id: { $ne: req.params.id }, 
+    const users = await Users.find({
+      _id: { $ne: req.params.id },
       is_active: true,
-      role: "USER",
-    }).select("email username avatarImage _id");  
+      is_profile_complete: true,
+    }).select("email username avatarImage _id");
 
     return res.json(users);
   } catch (ex) {
@@ -126,20 +133,17 @@ export const getAllUsers = async (req, res, next) => {
   }
 };
 
-
-// get all contact users 
+// Get all contact users
 export const getAllContactsUsers = async (req, res, next) => {
   try {
     const { id } = req.params;
 
-    // Find all chats where the user is a participant
-    const chats = await Chats.find({ participants: id, is_active: true  })
-      .populate("participants", "username avatarImage email _id last_active") // Get user details
-      .lean(); // Convert Mongoose documents to plain objects for performance
+    const chats = await Chats.find({ participants: id, is_active: true })
+      .populate("participants", "username avatarImage email _id last_active")
+      .lean();
 
-    // Extract unique contacts from chats
     const contacts = [];
-    const addedUserIds = new Set(); // To avoid duplicates
+    const addedUserIds = new Set();
 
     chats.forEach((chat) => {
       chat.participants.forEach((participant) => {
@@ -170,115 +174,26 @@ export const getAllContactsUsers = async (req, res, next) => {
   }
 };
 
-
 export const setAvatar = async (req, res, next) => {
   try {
-    const userId = req.params.id; // Capturing the user ID from the URL
-    const avatarImage = req.body.image; // Capturing the image URL from the body
+    const userId = req.params.id;
+    const avatarImage = req.body.image;
 
-    // Find the user by ID and update their avatar image and avatar status
     const userData = await Users.findByIdAndUpdate(
-      userId, // Using the userId from the URL parameter
+      userId,
       {
-        isAvatarImageSet: true, // Flagging the avatar image as set
-        avatarImage, // Updating the avatarImage field with the provided image URL
+        isAvatarImageSet: true,
+        avatarImage,
       },
-      { new: true } // Return the updated user document
+      { new: true }
     );
 
     return res.json({
-      isSet: userData.isAvatarImageSet, // Returning if the avatar image was successfully set
-      image: userData.avatarImage, // Returning the new avatar image URL
+      isSet: userData.isAvatarImageSet,
+      image: userData.avatarImage,
     });
   } catch (ex) {
-    next(ex); // Passing any errors to the next middleware (usually an error handler)
-  }
-};
-
-export const forgotPassword = async (req, res, next) => {
-  try {
-    const { email } = req.body;
-
-    const user = await Users.findOne({ email });
-    if (!user) return res.status(404).json({ status: false, message: "User not found" });
-
-    // Generate secure reset token
-    const token = crypto.randomBytes(32).toString("hex");
-    const expiresAt = Date.now() + 3600000; // Token expires in 1 hour
-
-    // Store token in database (Ensure PasswordReset model exists)
-    await PasswordReset.create({ userId: user._id, token, expiresAt });
-
-    // Send reset email
-    await sendResetEmail(user.email, token);
-
-    res.json({ status: true, message: "Password reset email sent" });
-  } catch (err) {
-    console.error("Forgot password error:", err);
-    res.status(500).json({ status: false, message: "Internal server error" });
-  }
-};
-
-export const resetPassword = async (req, res, next) => {
-  const { token } = req.params;
-  const { password } = req.body;
-
-  const resetRequest = await PasswordReset.findOne({ token });
-
-  if (!resetRequest || resetRequest.expiresAt < Date.now()) {
-    return res.status(400).json({ status: false, message: "Invalid or expired token" });
-  }
-
-  const user = await Users.findById(resetRequest.userId);
-  if (!user) return res.status(404).json({ status: false, message: "User not found" });
-
-  // Update password
-  user.password = await bcrypt.hash(password, 10);
-  await user.save();
-
-  // Remove the used reset token from DB
-  await PasswordReset.deleteOne({ _id: resetRequest._id });
-
-  res.json({ status: true, message: "Password reset successful" });
-}
-
-export const refreshToken = async (req, res) => {
-  try {
-    const { refreshToken } = req.body;
-    if (!refreshToken) {
-      return res.status(403).json({ message: "Refresh Token Required" });
-    }
-
-    // Verify Refresh Token
-    jwt.verify(refreshToken, process.env.JWT_SECRET, async (err, decoded) => {
-      if (err) {
-        return res.status(403).json({ message: "Invalid Refresh Token" });
-      }
-
-      if (!client.isOpen) {
-        await client.connect();
-      }
-
-      try {
-        const storedToken = await client.get(decoded.userId.toString())
-
-        if (!storedToken || storedToken !== refreshToken) {
-          return res.status(403).json({ message: "Token invalid or expired" });
-        }
-
-        // Generate a new Access Token
-        const newAccessToken = jwt.sign({ userId: decoded.userId, role: decoded.role, }, process.env.JWT_SECRET, { expiresIn: "15m" });
-
-        // Optionally, you can also return a new refresh token here if needed
-        res.json({ accessToken: newAccessToken });
-
-      } catch (err) {
-        return res.status(500).json({ message: "Error accessing Redis" });
-      }
-    });
-  } catch (err) {
-    console.error(err); // Log the error for debugging
-    res.status(500).json({ message: "Server error" });
+    next(ex);
   }
 };
 
@@ -291,7 +206,7 @@ export const getUserOnlineStatus = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
-}
+};
 
 export const getUserBlockStatus = async (req, res) => {
   try {
@@ -302,49 +217,27 @@ export const getUserBlockStatus = async (req, res) => {
   } catch (err) {
     res.status(500).json({ message: "Server error" });
   }
-}
+};
 
 export const logOut = async (req, res) => {
   try {
-    const { userId } = req.body; // User ID from frontend
+    const userId = req.user.userId;
 
-    // Check if userId is provided
-    if (!userId) {
-      return res.status(400).json({ message: "User ID is required" });
+    // Remove from onlineUsers map
+    if (global.onlineUsers && global.onlineUsers.has(userId)) {
+      global.onlineUsers.delete(userId);
     }
 
-    // Remove the user from onlineUsers (in-memory store) if necessary
-    if (onlineUsers.has(userId)) {
-      onlineUsers.delete(userId); // Ensuring the user is removed from the online session tracking
-    }
+    // Update user status in DB
+    await Users.findByIdAndUpdate(userId, {
+      is_online: false,
+      socket_id: null,
+      last_active: new Date(),
+    });
 
-    // Ensure Redis client is connected
-    if (!client.isOpen) {
-      await client.connect();
-    }
-
-    // Log the Redis key to check if it exists
-    const tokenExists = await client.exists(userId);
-
-    // If the token doesn't exist, log it but continue the process
-    if (tokenExists === 0) {
-      console.log(`No active session found for user ${userId}`);
-      // You can choose to still log the user out, even though no session was found in Redis
-    }
-
-    // Remove the user's refresh token from Redis if it exists
-    if (tokenExists === 1) {
-      await client.del(userId); // Using await to ensure Redis command completes
-      console.log(`Removed user ${userId}'s session from Redis`);
-    }
-
-    // Respond with a success message, regardless of whether the session was found
     res.status(200).json({ message: "Logged out successfully" });
-
   } catch (err) {
-    console.error("Error during logout:", err); // Log the error for debugging
+    console.error("Error during logout:", err);
     res.status(500).json({ message: "Server error during logout" });
   }
 };
-
-

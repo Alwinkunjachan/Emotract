@@ -9,12 +9,13 @@ const usersSchema = new mongoose.Schema(
       max: 20,
       unique: true,
     },
-    device_id: {
+    auth0_id: {
       type: String,
-      required: false,
-      default: "NA",
+      unique: true,
+      sparse: true,
+      index: true,
     },
-    clerk_id: {
+    device_id: {
       type: String,
       required: false,
       default: "NA",
@@ -31,20 +32,21 @@ const usersSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
+      required: false,
       min: 8,
     },
     aadhaar_number: {
       type: String,
-      unique: true,
     },
     firstname: {
       type: String,
-      required: true,
+      required: false,
+      default: "",
     },
     lastname: {
       type: String,
-      required: true,
+      required: false,
+      default: "",
     },
     parent_email: {
       type: String,
@@ -52,7 +54,8 @@ const usersSchema = new mongoose.Schema(
     },
     age: {
       type: Number,
-      required: true,
+      required: false,
+      default: 0,
     },
     gender: {
       type: String,
@@ -61,8 +64,7 @@ const usersSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      required: true,
-      unique: true,
+      required: false,
     },
     imageUrl: {
       type: String,
@@ -107,6 +109,10 @@ const usersSchema = new mongoose.Schema(
     avatarImage: {
       type: String,
       default: "",
+    },
+    is_profile_complete: {
+      type: Boolean,
+      default: false,
     },
     role: {
       type: String,

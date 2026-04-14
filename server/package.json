@@ -10,11 +10,13 @@
     "migrate:seed": "node migrations/migrate.js --seed",
     "migrate:drop": "node migrations/migrate.js --drop",
     "migrate:fresh": "node migrations/migrate.js --drop --seed",
+    "migrate:auth0": "node migrations/migrateToAuth0.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "auth0": "^4.37.0",
     "axios": "^1.7.9",
     "bcrypt": "^5.0.1",
     "chalk": "^5.4.1",
@@ -23,6 +25,8 @@
     "crypto": "^1.0.1",
     "dotenv": "^16.0.0",
     "express": "^4.21.2",
+    "express-oauth2-jwt-bearer": "^1.8.0",
+    "jose": "^6.2.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.10.0",
     "nodemailer": "^6.10.0",
