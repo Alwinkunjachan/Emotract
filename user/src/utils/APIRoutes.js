@@ -1,7 +1,4 @@
-export const loginRoute = `/auth/login`;
-export const registerRoute = `/auth/register`;
-export const resetPasswordRoute = `/auth/reset-password`;
-export const forgotPasswordRoute = `/auth/forgot-password`;
+export const completeProfileRoute = `/auth/complete-profile`;
 export const logoutRoute = `/auth/logout`;
 export const allUsersRoute = `/auth/all-users`;
 export const allContactUsersRoute = `/auth/all-contact-users`;

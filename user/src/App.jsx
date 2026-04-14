@@ -1,27 +1,31 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useEffect } from "react";
+import { Routes, Route } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
 import SetAvatar from "./components/SetAvatar";
 import Chat from "./pages/Chat";
 import Login from "./pages/Login";
-import Register from "./pages/Register";
-import ResetPassword from "./pages/ResetPassword";
-import ForgotPassword from "./pages/ForgotPassword";
+import CompleteProfile from "./pages/CompleteProfile";
 import PrivateRoute from "./utils/PrivateRoute";
+import { setTokenGetter } from "./utils/axiosInstance";
 
 function App() {
+  const { getAccessTokenSilently } = useAuth0();
+
+  // Wire up axiosInstance to use Auth0 tokens
+  useEffect(() => {
+    setTokenGetter(getAccessTokenSilently);
+  }, [getAccessTokenSilently]);
+
   return (
-      <BrowserRouter>
-        <Routes>
-          <Route path="/register" element={<Register />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/reset-password/:token" element={<ResetPassword />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/setAvatar" element={<SetAvatar />} />
-          <Route element={<PrivateRoute />}>
-            <Route path="/" element={<Chat />} />
-          </Route>
-        </Routes>
-      </BrowserRouter>
-  )
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route element={<PrivateRoute />}>
+        <Route path="/complete-profile" element={<CompleteProfile />} />
+        <Route path="/setAvatar" element={<SetAvatar />} />
+        <Route path="/" element={<Chat />} />
+      </Route>
+    </Routes>
+  );
 }
 
-export default App
+export default App;

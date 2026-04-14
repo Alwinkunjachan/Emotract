@@ -1,16 +1,29 @@
 import { Navigate, Outlet } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
 
 const PrivateRoute = ({ children }) => {
-  const isAuthenticated = !!localStorage.getItem("accessToken");
+  const { isAuthenticated, isLoading } = useAuth0();
+
+  if (isLoading) {
+    return (
+      <div style={{
+        height: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        backgroundColor: "#131324",
+        color: "white",
+      }}>
+        Loading...
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
-    // If not authenticated, navigate to login page
     return <Navigate to="/login" />;
   }
 
-  // If authenticated, render children (or Outlet if no children are passed)
   return children ? <>{children}</> : <Outlet />;
 };
 
 export default PrivateRoute;
-  
