@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
 import styled from "styled-components";
 import { allContactUsersRoute, userBlockRoute } from "../utils/APIRoutes";
 import ChatContainer from "../components/ChatContainer";
@@ -11,6 +12,7 @@ import SuspendedUserPopup from "../components/SuspendedUserPopup";
 
 export default function Chat() {
   const navigate = useNavigate();
+  const { isAuthenticated } = useAuth0();
   const socket = useSocket();
   const { connect } = useSocketActions();
   const [contacts, setContacts] = useState([]);
@@ -26,39 +28,48 @@ export default function Chat() {
   const [onlineUsers, setOnlineUsers] = useState(new Set());
   const [lastSeenMap, setLastSeenMap] = useState({});
 
+  // Fetch current user profile from backend /me endpoint
   useEffect(() => {
-    const checkUser = async () => {
-      const storedData = localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY);
-      
-      if (!storedData) {
-        navigate("/login");
-      } else {
-        try {
-          const parsedData = JSON.parse(storedData);
-          setCurrentUser(parsedData);
-        } catch (error) {
-          console.error("Error parsing localStorage data:", error);
-          navigate("/login"); // Handle potential corruption by redirecting to login
+    const fetchCurrentUser = async () => {
+      if (!isAuthenticated) return;
+
+      try {
+        const { data } = await axiosInstance.get("/auth/me");
+        if (data.status && data.user) {
+          if (!data.user.is_profile_complete) {
+            navigate("/complete-profile");
+            return;
+          }
+          setCurrentUser(data.user);
+        } else {
+          navigate("/complete-profile");
+        }
+      } catch (error) {
+        console.error("Error fetching current user:", error);
+        // 404 = user exists in Auth0 but not in local DB yet
+        // 401 = token invalid, need to re-login
+        if (error.response?.status === 401) {
+          navigate("/login");
+        } else {
+          navigate("/complete-profile");
         }
       }
     };
-  
-    checkUser();
-  }, [navigate]);
 
-  // Connect socket when user is authenticated
+    fetchCurrentUser();
+  }, [isAuthenticated, navigate]);
+
+  // Connect socket once when user is loaded
+  const hasConnected = useRef(false);
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && !hasConnected.current) {
+      hasConnected.current = true;
       connect();
     }
   }, [currentUser, connect]);
 
-  // Register user on socket once connected
-  useEffect(() => {
-    if (socket && currentUser) {
-      socket.emit("add-user", currentUser._id);
-    }
-  }, [socket, currentUser]);
+  // Socket events are auto-registered on connection (server uses socket.userId)
+  // No need to emit add-user — the server handles it in the connection handler
 
   useEffect(() => {
     const fetchContacts = async () => {
@@ -67,7 +78,6 @@ export default function Chat() {
           try {
             const { data } = await axiosInstance.get(`${allContactUsersRoute}/${currentUser._id}`);
             setContacts(data);
-            // Populate lastSeenMap from DB data for users who are offline
             const initialLastSeen = {};
             data.forEach((contact) => {
               if (contact.last_active) {
@@ -90,11 +100,11 @@ export default function Chat() {
             const { data } = await axiosInstance.get(`${userBlockRoute}/${currentUser?._id}`);
             setUserBlockStatus(data?.is_blocked);
           } catch (error) {
-            console.error("Error fetching contacts:", error);
+            console.error("Error fetching block status:", error);
           }
         }
       }
-  
+
     fetchContacts();
     fetchUserBlockStatus();
   }, [currentUser, navigate]);
@@ -102,7 +112,6 @@ export default function Chat() {
   // Keep ref in sync with currentChat so socket listener can access latest value
   useEffect(() => {
     currentChatRef.current = currentChat;
-    // Persist selected chat across page refresh
     if (currentChat) {
       sessionStorage.setItem("currentChat", JSON.stringify(currentChat));
     } else {
@@ -110,34 +119,53 @@ export default function Chat() {
     }
   }, [currentChat]);
 
+  // Keep a ref to contacts so the socket handler can access the latest list
+  const contactsRef = useRef(contacts);
+  useEffect(() => {
+    contactsRef.current = contacts;
+  }, [contacts]);
+
   // Listen for incoming messages at the parent level
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !currentUser) return;
 
     const handleMessageReceive = (data) => {
       const activeChat = currentChatRef.current;
 
-      // Set arrival message for ChatContainer to pick up
       setArrivalMessage({ fromSelf: false, message: data.msg, from: data.from });
 
-      // Update the contact's last message preview in the sidebar
       const last_message = {
         text: data.msg,
         sender_id: data.from,
         sent_at: new Date(),
       };
 
-      setContacts((prevContacts) => {
-        const contactExists = prevContacts.some(c => c._id === data.from);
-        if (contactExists) {
-          return prevContacts.map(c =>
-            c._id === data.from ? { ...c, last_message } : c
-          );
-        }
-        return prevContacts;
-      });
+      const contactExists = contactsRef.current.some(c => c._id === data.from);
 
-      // If the message is NOT from the user we're currently chatting with, mark as unread
+      if (contactExists) {
+        // Update existing contact's last message
+        setContacts((prevContacts) =>
+          prevContacts.map(c =>
+            c._id === data.from ? { ...c, last_message } : c
+          )
+        );
+      } else {
+        // New unknown sender — fetch their info and add to contacts
+        axiosInstance.get(`/auth/all-users/${currentUser._id}`).then(({ data: allUsers }) => {
+          const newContact = allUsers.find(u => u._id === data.from);
+          if (newContact) {
+            setContacts((prev) => {
+              if (prev.some(c => c._id === data.from)) return prev;
+              return [...prev, {
+                ...newContact,
+                lastMessage: { text: last_message.text, sender: "Them", sentAt: last_message.sent_at },
+              }];
+            });
+          }
+        }).catch(err => console.error("Error fetching new contact:", err));
+      }
+
+      // Mark as unread if not the active chat
       if (!activeChat || activeChat._id !== data.from) {
         setUnreadMessages((prev) => ({
           ...prev,
@@ -171,7 +199,6 @@ export default function Chat() {
         }
         return next;
       });
-      // Store lastSeen timestamp when a user goes offline
       if (!isOnline && lastSeen) {
         setLastSeenMap((prev) => ({ ...prev, [userId]: lastSeen }));
       }
@@ -186,32 +213,27 @@ export default function Chat() {
     };
   }, [socket]);
 
-  // Handle new contact after message
   const handleContactAfterMessage = useCallback(
     (updatedContact) => {
       setContacts((prevContacts) => {
         const isContactExist = prevContacts.some(contact => contact._id === updatedContact._id);
 
         if (isContactExist) {
-          // Update existing contact's last_message
           return [...prevContacts.map(contact =>
             contact._id === updatedContact._id
               ? { ...contact, last_message: updatedContact.last_message }
               : contact
-          )]; // ✅ Return a NEW array to trigger re-render
+          )];
         } else {
-          // Add new contact with last_message
-          return [...prevContacts, updatedContact]; // ✅ Spread operator forces a new reference
+          return [...prevContacts, updatedContact];
         }
       });
     },
     [setContacts]
   );
 
-
   const handleChatChange = (chat) => {
     setCurrentChat(chat);
-    // Clear unread count when opening a chat
     if (chat) {
       setUnreadMessages((prev) => {
         const updated = { ...prev };
@@ -226,11 +248,11 @@ export default function Chat() {
       <Container>
         <div className="chat-wrapper">
           <SuspendedUserPopup isSuspended={userBlockStatus}/>
-          <Contacts contacts={contacts} changeChat={handleChatChange} unreadMessages={unreadMessages} onlineUsers={onlineUsers} />
+          <Contacts contacts={contacts} changeChat={handleChatChange} unreadMessages={unreadMessages} onlineUsers={onlineUsers} currentUser={currentUser} />
           {currentChat === undefined ? (
-            <Welcome />
+            <Welcome currentUser={currentUser} />
           ) : (
-            <ChatContainer currentChat={currentChat} handleContactAfterMessage={handleContactAfterMessage} arrivalMessage={arrivalMessage} onlineUsers={onlineUsers} lastSeenMap={lastSeenMap} />
+            <ChatContainer currentChat={currentChat} currentUser={currentUser} handleContactAfterMessage={handleContactAfterMessage} arrivalMessage={arrivalMessage} onlineUsers={onlineUsers} lastSeenMap={lastSeenMap} />
           )}
         </div>
       </Container>

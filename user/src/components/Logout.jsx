@@ -1,61 +1,42 @@
 import React from "react";
-import { useNavigate } from "react-router-dom";
 import { BiLogOut } from "react-icons/bi";
+import { useAuth0 } from "@auth0/auth0-react";
 import { logoutRoute } from "../utils/APIRoutes";
 import axiosInstance from "../utils/axiosInstance";
 import { useSocket, useSocketActions } from "../context/SocketProvider";
 
 export default function Logout() {
-  const navigate = useNavigate();
   const socket = useSocket();
   const { disconnect } = useSocketActions();
+  const { logout } = useAuth0();
 
   const handleLogout = async () => {
     try {
-      // Get user data from localStorage
-      const userData = localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY);
-      if (!userData) {
-        console.error("User not found in localStorage");
-        return;
-      }
-  
-      const userId = JSON.parse(userData)._id;
-  
-      // Send the logout request
-      const response = await axiosInstance.post(logoutRoute, { userId });
+      // Notify backend to update online status
+      await axiosInstance.post(logoutRoute);
 
-      if (response.status === 200) {
-        // Ensure the socket is connected before emitting logout
-        if (socket && socket.connected) {
-          socket.emit("logout", userId);
-          disconnect(); // Close the WebSocket connection
-        }
-  
-      // Clear tokens and user data
-      localStorage.removeItem("accessToken");
-      localStorage.removeItem("refreshToken");
-      localStorage.removeItem(import.meta.env.VITE_LOCALHOST_KEY);
+      // Disconnect socket
+      if (socket && socket.connected) {
+        socket.emit("logout");
+        disconnect();
+      }
+
+      // Clear any remaining session data
       sessionStorage.removeItem("currentChat");
-  
-      // Navigate to the login page
-      navigate("/login");
-    } else {
-      console.error("Failed to log out. Server response:", response.data);
-      alert("An error occurred while logging out. Please try again.");
-    }
+
+      // Auth0 logout — clears Auth0 session and redirects
+      logout({ logoutParams: { returnTo: window.location.origin + "/login" } });
     } catch (error) {
-      // Handle any errors
       console.error("Logout error:", error);
-      alert("An error occurred while logging out. Please try again.");
+      // Still perform Auth0 logout even if backend call fails
+      logout({ logoutParams: { returnTo: window.location.origin + "/login" } });
     }
   };
-  
 
   return (
-      <button className="flex cursor-pointer w-full p-2" onClick={handleLogout}>
-        <BiLogOut className="w-5 h-5 text-white " />
-        <span className='ml-2 text-white'>Logout</span>
-      </button>
+    <button className="flex cursor-pointer w-full p-2" onClick={handleLogout}>
+      <BiLogOut className="w-5 h-5 text-white" />
+      <span className="ml-2 text-white">Logout</span>
+    </button>
   );
 }
-

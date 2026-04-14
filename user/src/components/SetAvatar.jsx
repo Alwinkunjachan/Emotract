@@ -4,14 +4,17 @@ import loader from "../assets/loader.gif";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 import { useNavigate } from "react-router-dom";
+import { useAuth0 } from "@auth0/auth0-react";
 import { setAvatarRoute } from "../utils/APIRoutes";
 import axiosInstance from "../utils/axiosInstance";
 
 export default function SetAvatar() {
   const navigate = useNavigate();
+  const { isAuthenticated, isLoading: authLoading } = useAuth0();
   const [avatars, setAvatars] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedAvatar, setSelectedAvatar] = useState(undefined);
+  const [currentUser, setCurrentUser] = useState(null);
 
   const toastOptions = {
     position: "bottom-right",
@@ -21,36 +24,39 @@ export default function SetAvatar() {
     theme: "dark",
   };
 
+  // Fetch current user from backend
   useEffect(() => {
-    const checkUser = () => {
-      if (!localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY)) {
+    if (authLoading) return;
+    if (!isAuthenticated) {
+      navigate("/login");
+      return;
+    }
+
+    const fetchUser = async () => {
+      try {
+        const { data } = await axiosInstance.get("/auth/me");
+        if (data.status && data.user) {
+          setCurrentUser(data.user);
+        } else {
+          navigate("/login");
+        }
+      } catch (error) {
+        console.error("Error fetching user:", error);
         navigate("/login");
       }
     };
-  
-    checkUser();
-  }, [navigate]); // Ensure `navigate` is in dependencies
-  
+    fetchUser();
+  }, [isAuthenticated, authLoading, navigate]);
 
   const setProfilePicture = async () => {
     if (selectedAvatar === undefined) {
       toast.error("Please select an avatar", toastOptions);
-    } else {
-      const user = await JSON.parse(
-        localStorage.getItem(import.meta.env.VITE_LOCALHOST_KEY)
-      );
-
-      const { data } = await axiosInstance.post(`${setAvatarRoute}/${user._id}`, {
+    } else if (currentUser) {
+      const { data } = await axiosInstance.post(`${setAvatarRoute}/${currentUser._id}`, {
         image: avatars[selectedAvatar],
       });
 
       if (data.isSet) {
-        user.isAvatarImageSet = true;
-        user.avatarImage = data.image;
-        localStorage.setItem(
-          import.meta.env.VITE_LOCALHOST_KEY,
-          JSON.stringify(user)
-        );
         navigate("/");
       } else {
         toast.error("Error setting avatar. Please try again.", toastOptions);
@@ -77,9 +83,8 @@ export default function SetAvatar() {
         setIsLoading(false);
       }
     };
-    
-  
-    fetchAvatars(); 
+
+    fetchAvatars();
   }, []);
 
   return (
