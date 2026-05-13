@@ -24,10 +24,12 @@ import mongoose from "mongoose";
 import crypto from "crypto";
 import dotenv from "dotenv";
 import { ManagementClient } from "auth0";
+import { isDocker } from "../config/runtime.js";
 
 dotenv.config();
 
-const MONGO_URL = process.env.MONGO_URL || "mongodb://localhost:27017/chat";
+let MONGO_URL = process.env.MONGO_URL || "mongodb://localhost:27017/chat";
+if (!isDocker) MONGO_URL = MONGO_URL.replace("//mongo:", "//localhost:");
 
 // ─── Color helpers ──────────────────────────────────────────────────
 const green = (t) => `\x1b[32m${t}\x1b[0m`;

@@ -11,11 +11,12 @@
 
 import mongoose from "mongoose";
 import dotenv from "dotenv";
+import { isDocker } from "../config/runtime.js";
 
 dotenv.config();
 
-const MONGO_URL =
-  process.env.MONGO_URL || "mongodb://localhost:27017/chat";
+let MONGO_URL = process.env.MONGO_URL || "mongodb://localhost:27017/chat";
+if (!isDocker) MONGO_URL = MONGO_URL.replace("//mongo:", "//localhost:");
 
 const args = process.argv.slice(2);
 const shouldDrop = args.includes("--drop");

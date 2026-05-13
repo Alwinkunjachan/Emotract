@@ -9,6 +9,8 @@
     "migrate": "node migrations/migrate.js",
     "migrate:drop": "node migrations/migrate.js --drop",
     "migrate:auth0": "node migrations/migrateToAuth0.js",
+    "seed:user": "node migrations/seedDefaultUser.js",
+    "reset:chats": "node migrations/resetChats.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
