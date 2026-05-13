@@ -1,10 +1,11 @@
 import { createClient } from 'redis';
+import { isDocker } from './runtime.js';
 
 // Function to connect to Redis
 const connectRedis = async () => {
   const redisOptions = {
     socket: {
-      host: process.env.REDIS_HOST || 'localhost',
+      host: isDocker ? (process.env.REDIS_HOST || 'redis') : 'localhost',
       port: process.env.REDIS_PORT || 6379,
     },
   };

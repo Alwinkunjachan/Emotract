@@ -1,11 +1,15 @@
 // /config/db.js
 import mongoose from "mongoose";
 import { createDefaultAdmin } from "./admin.js";
+import { isDocker } from "./runtime.js";
 
 const connectDB = async () => {
   try {
-    // Use host.docker.internal to connect to the MongoDB running on the host
-    await mongoose.connect(process.env.MONGO_URL || "mongodb://host.docker.internal:27017/chat");
+    let mongoUrl = process.env.MONGO_URL || "mongodb://localhost:27017/chat";
+    if (!isDocker) {
+      mongoUrl = mongoUrl.replace("//mongo:", "//localhost:");
+    }
+    await mongoose.connect(mongoUrl);
     await createDefaultAdmin();
     console.log("DB Connection Successful");
   } catch (err) {
