@@ -143,10 +143,11 @@ docker-compose up --build -d
 ### Step 4: Run Migration
 
 ```bash
-docker-compose exec backend npm run migrate:fresh
+docker-compose exec backend npm run migrate
+docker-compose exec backend npm run seed:user   # optional: create default test user
 ```
 
-This creates collections, indexes, and an admin user in both Auth0 and MongoDB.
+`migrate` creates collections, indexes, and validators. The default admin is auto-created in MongoDB on server startup (Mongo-only — link it to Auth0 with `npm run migrate:auth0`). `seed:user` is optional and creates a default test user in both Auth0 and MongoDB so you can log in immediately.
 
 ### Step 5: Access the Application
 
@@ -179,7 +180,7 @@ git clone https://github.com/Alwinkunjachan/Emotract.git
 cd Emotract
 ```
 
-Create `.env` files as above, but use `MONGO_URL=mongodb://localhost:27017/chat`.
+Create `.env` files as above. The same `MONGO_URL` works in both Docker and host modes — [server/config/runtime.js](../server/config/runtime.js) detects `/.dockerenv` at runtime and rewrites the `mongo` service hostname to `localhost` on host runs.
 
 ### Step 2: Start MongoDB
 
@@ -190,7 +191,8 @@ Ensure MongoDB is running locally.
 ```bash
 cd server
 npm install
-npm run migrate:fresh
+npm run migrate
+npm run seed:user   # optional: default test user in Auth0 + Mongo
 npm start
 ```
 
@@ -218,11 +220,13 @@ Run from the `server/` directory:
 
 | Command | Description |
 |---------|-------------|
-| `npm run migrate` | Create collections, indexes, and admin user (in Auth0 + MongoDB) |
-| `npm run migrate:seed` | Above + seed 3 sample test users |
+| `npm run migrate` | Create collections, indexes, and validators |
 | `npm run migrate:drop` | Drop all collections and re-create (DESTRUCTIVE) |
-| `npm run migrate:fresh` | Drop + re-create + seed sample data (DESTRUCTIVE) |
-| `npm run migrate:auth0` | Migrate existing MongoDB users to Auth0 |
+| `npm run migrate:auth0` | Link existing MongoDB users to Auth0 (creates Auth0 accounts) |
+| `npm run seed:user` | Create default test user `alwinpkunjachan@gmail.com` in Auth0 + MongoDB (idempotent) |
+| `npm run reset:chats` | Wipe `chats` + `messages` collections (users untouched). Pass `-- -y` to skip the prompt |
+
+Default admin is auto-created in MongoDB on every server start ([server/config/admin.js](../server/config/admin.js)) — local-only, link to Auth0 with `migrate:auth0`.
 
 ---
 
@@ -246,6 +250,7 @@ Run from the `server/` directory:
 | `ADMIN_PASSWORD`        | Yes      | -        | Default admin account password (must meet Auth0 policy: uppercase, lowercase, number, special char) |
 | `ADMIN_EMAIL`           | Yes      | -        | Default admin account email          |
 | `ADMIN_PHONE`           | Yes      | -        | Default admin account phone          |
+| `DEFAULT_USER_PASSWORD` | No       | `Default@123` | Password used by `npm run seed:user` |
 | `EMAIL_USER`            | No       | -        | SMTP sender email address            |
 | `EMAIL_PASS`            | No       | -        | SMTP email app password              |
 | `EMAIL_HOST`            | No       | -        | SMTP server hostname                 |

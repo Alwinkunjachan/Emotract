@@ -1,0 +1,154 @@
+flowchart TB
+    %% ============ EXTERNAL IDENTITY / EMAIL ============
+    subgraph EXT["External Services"]
+        direction TB
+        AUTH0["Auth0 Tenant<br/>Universal Login / JWKS / userinfo<br/>RS256 JWT issuer"]
+        SMTP["SMTP (Nodemailer)<br/>Gmail / custom host<br/>parent + user warning emails"]
+    end
+
+    %% ============ USER APP (5173) ============
+    subgraph USER_APP["User App — React 19 + Vite (port 5173)"]
+        direction TB
+        U_LOGIN["/login<br/>Auth0 redirect"]
+        U_PROFILE["/complete-profile<br/>Aadhaar, phone, age,<br/>gender, parent email"]
+        U_AVATAR["/setAvatar"]
+        U_CHAT["/ (Chat)<br/>Contacts · ChatContainer · ChatInput · Logout"]
+        U_AUTH0CTX["Auth0ProviderWithNavigate<br/>@auth0/auth0-react<br/>localStorage cache"]
+        U_SOCKCTX["SocketProvider<br/>useSocket()"]
+        U_AXIOS["axiosInstance<br/>Authorization: Bearer <JWT>"]
+    end
+
+    %% ============ ADMIN APP (5174) ============
+    subgraph ADMIN_APP["Admin App — React 18 + TS + ShadCN (port 5174)"]
+        direction TB
+        A_LOGIN["/login<br/>Auth0 redirect"]
+        A_DASH["/ Dashboard<br/>Overview + Analytics tabs"]
+        A_USERS["/users<br/>Student Mgmt table"]
+        A_USER_DETAIL["/users/:id<br/>Analytics + moderation"]
+        A_AUTH0CTX["Auth0ProviderWithNavigate"]
+        A_RQ["React Query<br/>server state cache"]
+        A_AXIOS["axiosInstance<br/>Authorization: Bearer <JWT>"]
+    end
+
+    %% ============ BACKEND (5001) ============
+    subgraph SERVER["Backend — Node.js + Express (port 5001)"]
+        direction TB
+
+        subgraph MW["Middleware pipeline"]
+            direction LR
+            MW1["verifyAccessToken<br/>express-oauth2-jwt-bearer<br/>RS256 via JWKS"]
+            MW2["resolveUser<br/>map sub → Mongo user<br/>auto-provision via /userinfo<br/>role by Origin header"]
+            MW3["isAdmin<br/>role === ADMIN"]
+            MW1 --> MW2 --> MW3
+        end
+
+        subgraph ROUTES["REST API  /api/v1"]
+            direction TB
+            R_AUTH["auth.js<br/>/auth/me · /complete-profile · /setavatar<br/>/all-users · /all-contact-users<br/>/online-status · /block-status · /logout<br/>/auth0-webhook (public)<br/>ADMIN: /dashboard-stats · /complete-users<br/>/user-gender-details · /get-user-details/:id<br/>/block-user · /unblock-user · /delete-user<br/>/get-user-analytics/:id · /restrict-user"]
+            R_MSG["messages.js<br/>POST /messages/addmsg<br/>POST /messages/getmsg"]
+        end
+
+        subgraph CTRL["Controllers"]
+            direction TB
+            C_USER["userController<br/>completeProfile · auth0Webhook<br/>getMe · getAllUsers · getAllContactsUsers<br/>setAvatar · getUserOnlineStatus<br/>getUserBlockStatus · logOut"]
+            C_ADMIN["adminController<br/>getDashboardStats · getCompleteUsersDetails<br/>getUserDetails · blockUser · unBlockUser<br/>deleteUser · getUserAnalytics<br/>informUserOrGuardian"]
+            C_MSG["messageController<br/>addMessage · getMessages"]
+        end
+
+        subgraph CFG["Config / Utils"]
+            direction TB
+            CRYPTO["crypto.js<br/>AES-256-CBC<br/>encrypt pre-save<br/>safeDecrypt on read"]
+            EMAIL_CFG["email.js<br/>Nodemailer transport<br/>emailTemplates"]
+            SOCKET_CFG["socket.js<br/>jose jwtVerify + JWKS<br/>global.onlineUsers Map"]
+        end
+
+        subgraph IO["Socket.io Gateway  (ws://:5001)"]
+            direction TB
+            SIO["Events:<br/>• online-users (S→C on connect)<br/>• user-status-change (S→broadcast)<br/>• send-msg (C→S)<br/>• msg-recieve (S→C)<br/>• logout (C→S)<br/>• disconnect (auto cleanup)"]
+        end
+    end
+
+    %% ============ DATABASE ============
+    subgraph DB["MongoDB (Mongoose)"]
+        direction TB
+        M_USERS[("Users<br/>auth0_id · email · username<br/>role (USER/ADMIN)<br/>is_active · is_online · is_flagged<br/>is_profile_complete · age_verified<br/>avatarImage · socket_id · last_active<br/>aadhaar_number · parent_email")]
+        M_CHATS[("Chats<br/>participants[] · is_group<br/>last_message{ text, sender_id, sent_at }<br/>is_active")]
+        M_MSGS[("Messages<br/>chat_id → Chats · sender_id → Users<br/>text (AES-256 ciphertext)<br/>message_status · processing_status<br/>is_flagged · read_by[] · reaction")]
+        M_CHATS -- "1..*" --> M_MSGS
+        M_USERS -- "participants" --> M_CHATS
+        M_USERS -- "sender_id" --> M_MSGS
+    end
+
+    %% ============ AUTH FLOW ============
+    U_LOGIN -. "redirect" .-> AUTH0
+    A_LOGIN -. "redirect" .-> AUTH0
+    AUTH0 -. "authorization code → JWT<br/>(localStorage)" .-> U_AUTH0CTX
+    AUTH0 -. "authorization code → JWT<br/>(localStorage)" .-> A_AUTH0CTX
+    U_AUTH0CTX --> U_AXIOS
+    U_AUTH0CTX --> U_SOCKCTX
+    A_AUTH0CTX --> A_AXIOS
+    A_AUTH0CTX --> A_RQ
+
+    %% ============ USER APP → BACKEND ============
+    U_CHAT --> U_AXIOS
+    U_PROFILE --> U_AXIOS
+    U_AVATAR --> U_AXIOS
+    U_AXIOS -- "HTTPS /api/v1/* + Bearer JWT" --> MW1
+
+    %% ============ ADMIN APP → BACKEND ============
+    A_DASH --> A_RQ
+    A_USERS --> A_RQ
+    A_USER_DETAIL --> A_RQ
+    A_RQ --> A_AXIOS
+    A_AXIOS -- "HTTPS /api/v1/* + Bearer JWT<br/>Origin: :5174 → ADMIN role" --> MW1
+
+    %% ============ REQUEST ROUTING ============
+    MW3 --> ROUTES
+    R_AUTH --> C_USER
+    R_AUTH --> C_ADMIN
+    R_MSG --> C_MSG
+
+    %% ============ CONTROLLER DEPENDENCIES ============
+    C_USER -- "CRUD profile,<br/>contacts, avatar" --> M_USERS
+    C_USER -- "active chats +<br/>last_message" --> M_CHATS
+    C_ADMIN -- "stats, block, flag,<br/>soft-delete" --> M_USERS
+    C_ADMIN -- "aggregate trends" --> M_MSGS
+    C_ADMIN -- "informUserOrGuardian" --> EMAIL_CFG
+    C_MSG -- "create/retrieve chat" --> M_CHATS
+    C_MSG -- "insert + read" --> M_MSGS
+    C_MSG --> CRYPTO
+    CRYPTO -- "encrypt on save /<br/>decrypt on read" --> M_MSGS
+    EMAIL_CFG -- "parent + user warnings" --> SMTP
+
+    %% ============ AUTH0 VERIFICATION ============
+    MW1 -- "fetch JWKS<br/>(cached)" --> AUTH0
+    MW2 -- "GET /userinfo on<br/>first login (auto-provision)" --> AUTH0
+    MW2 -- "find/create by auth0_id" --> M_USERS
+
+    %% ============ PUBLIC WEBHOOK ============
+    AUTH0 -- "post-signup webhook<br/>(AUTH0_WEBHOOK_SECRET)" --> R_AUTH
+
+    %% ============ SOCKET FLOW ============
+    U_SOCKCTX == "connect(auth: { JWT })" ==> SOCKET_CFG
+    SOCKET_CFG -- "jwtVerify via JWKS" --> AUTH0
+    SOCKET_CFG --> SIO
+    SIO -- "mark is_online,<br/>update socket_id, last_active" --> M_USERS
+    SIO -- "on send-msg:<br/>persist via addMessage" --> C_MSG
+    SIO == "msg-recieve · online-users ·<br/>user-status-change" ==> U_SOCKCTX
+    U_CHAT == "send-msg { to, msg }" ==> U_SOCKCTX
+
+    %% ============ END-TO-END MESSAGE DATA FLOW (numbered) ============
+    %% 1 UI emit → 2 socket auth'd send-msg → 3 addMessage → 4 encrypt+persist →
+    %% 5 update Chat.last_message → 6 emit msg-recieve to recipient socket
+
+    classDef ext fill:#fff4e6,stroke:#e8850d,color:#3b2300,stroke-width:1px;
+    classDef user fill:#e8f4ff,stroke:#1f6feb,color:#0b1f3a,stroke-width:1px;
+    classDef admin fill:#efe8ff,stroke:#7a3fe4,color:#1e0b3a,stroke-width:1px;
+    classDef server fill:#e9fbe9,stroke:#2ea043,color:#0d2b10,stroke-width:1px;
+    classDef db fill:#fde9ef,stroke:#cf2e5c,color:#3a0b1a,stroke-width:1px;
+
+    class AUTH0,SMTP ext;
+    class U_LOGIN,U_PROFILE,U_AVATAR,U_CHAT,U_AUTH0CTX,U_SOCKCTX,U_AXIOS user;
+    class A_LOGIN,A_DASH,A_USERS,A_USER_DETAIL,A_AUTH0CTX,A_RQ,A_AXIOS admin;
+    class MW1,MW2,MW3,R_AUTH,R_MSG,C_USER,C_ADMIN,C_MSG,CRYPTO,EMAIL_CFG,SOCKET_CFG,SIO server;
+    class M_USERS,M_CHATS,M_MSGS db;

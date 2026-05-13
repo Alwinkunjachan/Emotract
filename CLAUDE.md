@@ -96,6 +96,7 @@ Each service requires a `.env` file (see `.env.example` in each directory):
 - `ENCRYPTION_KEY` - 32-byte AES-256 key for message encryption
 - `EMAIL_USER`, `EMAIL_PASS`, `EMAIL_HOST`, `EMAIL_PORT` - SMTP config for Nodemailer
 - `ADMIN_USERNAME`, `ADMIN_PASSWORD`, `ADMIN_EMAIL`, `ADMIN_PHONE` - Default admin credentials
+- `DEFAULT_USER_PASSWORD` - (Optional) Password used by `npm run seed:user`. Falls back to `Default@123` if unset.
 
 **user/.env**:
 - `VITE_BACKEND_URL` (default: `http://localhost:5001`)
@@ -160,18 +161,35 @@ Each service requires a `.env` file (see `.env.example` in each directory):
 
 ```bash
 cd server
-npm run migrate          # Create collections, indexes, and admin user
-npm run migrate:seed     # Above + seed 3 sample test users
+npm run migrate          # Create collections, indexes, and validators
 npm run migrate:drop     # Drop all collections and re-create (DESTRUCTIVE)
-npm run migrate:fresh    # Drop + re-create + seed sample data (DESTRUCTIVE)
+npm run migrate:auth0    # Migrate existing Mongo users to Auth0
+npm run seed:user        # Create default test user in Auth0 + Mongo (idempotent)
+npm run reset:chats      # Wipe all chats + messages (users untouched)
 ```
+
+Default admin is also auto-created in Mongo on every server startup via `createDefaultAdmin()` ([server/config/admin.js](server/config/admin.js)). The startup admin is local-only and has no Auth0 linkage — use `npm run migrate:auth0` to link it.
+
+### Default Test User (`npm run seed:user`)
+
+Creates a USER-role account in BOTH Auth0 and MongoDB so you can log in immediately:
+
+- **Email:** `alwinpkunjachan@gmail.com`
+- **Username:** `alwinpkunjachan`
+- **Password:** `process.env.DEFAULT_USER_PASSWORD` if set, otherwise `Default@123`
+
+Idempotent: re-running detects existing Auth0/Mongo records and links/updates them.
+
+### Reset Chats (`npm run reset:chats`)
+
+`deleteMany({})` on `chats` and `messages`. Users (Mongo + Auth0) are untouched. Pass `-y` to skip the confirmation prompt: `npm run reset:chats -- -y`.
 
 ## Auth0 Migration
 
 To migrate existing users to Auth0:
 ```bash
 cd server
-node migrations/migrateToAuth0.js
+npm run migrate:auth0
 ```
 Migrated users will need to use "Forgot Password" on Auth0 to set their new password.
 

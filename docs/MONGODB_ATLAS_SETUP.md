@@ -94,17 +94,19 @@ Replace:
 
 ## Step 7: Run the Migration
 
-Now run the migration script to set up all collections, indexes, and the default admin user:
+Now run the migration script to set up all collections, indexes, and validators:
 
 ```bash
 cd server
 
-# Basic migration (collections + indexes + admin user)
+# Basic migration (collections + indexes + validators)
 npm run migrate
 
-# Migration with sample test users
-npm run migrate:seed
+# Optional: create a default test user (alwinpkunjachan@gmail.com) in Auth0 + Mongo
+npm run seed:user
 ```
+
+The default admin is auto-created in MongoDB when the server starts ([server/config/admin.js](../server/config/admin.js)).
 
 You should see output like:
 
@@ -187,10 +189,11 @@ Run these from the `server/` directory:
 
 | Command | Description |
 |---------|-------------|
-| `npm run migrate` | Create collections, indexes, and admin user |
-| `npm run migrate:seed` | Above + seed 3 sample test users |
+| `npm run migrate` | Create collections, indexes, and validators |
 | `npm run migrate:drop` | **Drop all collections** and re-create (DESTRUCTIVE) |
-| `npm run migrate:fresh` | Drop + re-create + seed sample data (DESTRUCTIVE) |
+| `npm run migrate:auth0` | Link existing Mongo users to Auth0 |
+| `npm run seed:user` | Create default test user `alwinpkunjachan@gmail.com` in Auth0 + Mongo (idempotent) |
+| `npm run reset:chats` | Wipe `chats` + `messages` collections (users untouched) |
 
 ---
 
