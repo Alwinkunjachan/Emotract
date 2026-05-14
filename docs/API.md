@@ -2,7 +2,7 @@
 
 Base URL: `http://localhost:5001/api/v1`
 
-Swagger Docs: `http://localhost:5001/api-docs`
+Swagger Docs: `http://localhost:5001/`
 
 ---
 

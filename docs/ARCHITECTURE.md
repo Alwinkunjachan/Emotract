@@ -6,48 +6,48 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                           CLIENTS                                   │
 │                                                                     │
-│  ┌──────────────────────┐       ┌──────────────────────────┐       │
-│  │   User App (React)   │       │   Admin App (React+TS)   │       │
-│  │   Port 5173          │       │   Port 5174              │       │
-│  │                      │       │                          │       │
-│  │  - Chat Interface    │       │  - Dashboard & Charts    │       │
-│  │  - Real-time msgs    │       │  - User Analytics        │       │
-│  │  - Online status     │       │  - Content Moderation    │       │
-│  │  - Auth0 login/SSO   │       │  - Auth0 admin login     │       │
-│  └──────────┬───────────┘       └────────────┬─────────────┘       │
-│             │ HTTP + WebSocket                │ HTTP                │
-└─────────────┼────────────────────────────────┼─────────────────────┘
-              │                                │
+│  ┌──────────────────────┐       ┌──────────────────────────┐        │
+│  │   User App (React)   │       │   Admin App (React+TS)   │        │
+│  │   Port 5173          │       │   Port 5174              │        │
+│  │                      │       │                          │        │
+│  │  - Chat Interface    │       │  - Dashboard & Charts    │        │
+│  │  - Real-time msgs    │       │  - User Analytics        │        │
+│  │  - Online status     │       │  - Content Moderation    │        │
+│  │  - Auth0 login/SSO   │       │  - Auth0 admin login     │        │
+│  └──────────┬───────────┘       └────────────┬─────────────┘        │
+│             │ HTTP + WebSocket               │ HTTP                 │
+└─────────────┼────────────────────────────────┼──────────────────────┘
+              │                                │                    
               ▼                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                     EXPRESS BACKEND (Port 5001)                      │
+│                     EXPRESS BACKEND (Port 5001)                     │
 │                                                                     │
-│  ┌──────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐  │
-│  │  Routes   │  │ Controllers  │  │  Middleware   │  │  Socket.io│  │
-│  │  /auth    │→ │ user         │  │ Auth0 JWT    │  │  Real-time│  │
-│  │  /messages│→ │ message      │  │ resolveUser  │  │  Auth0 JWT│  │
-│  │  /api-docs│  │ admin        │  │ isAdmin      │  │  verify   │  │
-│  └──────────┘  └──────┬───────┘  └──────────────┘  └───────────┘  │
+│  ┌──────────┐  ┌──────────────┐  ┌──────────────┐  ┌───────────┐    │
+│  │  Routes  │  │ Controllers  │  │  Middleware  │  │  Socket.io│    │
+│  │  /auth   │→ │ user         │  │ Auth0 JWT    │  │  Real-time│    │
+│  │ /messages│→ │ message      │  │ resolveUser  │  │  Auth0 JWT│    │
+│  │ /api-docs│  │ admin        │  │ isAdmin      │  │  verify   │    │
+│  └──────────┘  └──────┬───────┘  └──────────────┘  └───────────┘    │
 │                       │                                             │
-│  ┌────────────────────┼────────────────────────────────────────┐   │
-│  │                    │         SERVICES                        │   │
-│  │  ┌─────────────┐  │  ┌──────────────┐  ┌──────────────┐    │   │
-│  │  │ AES-256     │  │  │ Nodemailer   │  │ Auth0 Mgmt   │    │   │
-│  │  │ Encryption  │  │  │ Email        │  │ API Client   │    │   │
-│  │  │ /Decryption │  │  │ Service      │  │              │    │   │
-│  │  └─────────────┘  │  └──────────────┘  └──────────────┘    │   │
-│  └────────────────────┼────────────────────────────────────────┘   │
-└───────────────────────┼────────────────────────────────────────────┘
+│  ┌────────────────────┼────────────────────────────────────────┐    │
+│  │                    │         SERVICES                       │    │
+│  │  ┌─────────────┐   │  ┌──────────────┐  ┌──────────────┐    │    │
+│  │  │ AES-256     │   │  │ Nodemailer   │  │ Auth0 Mgmt   │    │    │
+│  │  │ Encryption  │   │  │ Email        │  │ API Client   │    │    │
+│  │  │ /Decryption │   │  │ Service      │  │              │    │    │
+│  │  └─────────────┘   │  └──────────────┘  └──────────────┘    │    │
+│  └────────────────────┼────────────────────────────────────────┘    │
+└───────────────────────┼─────────────────────────────────────────────┘
                         │
               ┌─────────┼───────────┐
               │         │           │
               ▼         ▼           ▼
       ┌───────────┐          ┌──────────────┐
-      │  MongoDB   │          │   Auth0      │
-      │            │          │              │
-      │ - Users    │          │ - Identity   │
-      │ - Messages │          │ - SSO/OAuth  │
-      │ - Chats    │          │ - Passwords  │
+      │  MongoDB  │          │   Auth0      │
+      │           │          │              │
+      │ - Users   │          │ - Identity   │
+      │ - Messages│          │ - SSO/OAuth  │
+      │ - Chats   │          │ - Passwords  │
       └───────────┘          └──────────────┘
 ```
 
